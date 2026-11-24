@@ -844,6 +844,10 @@
                     <div class="map-name" style="font-size:16px;">霜雪市集</div>
                     <div class="map-desc">稀疏的鐵皮屋與雪松，冰天雪地的邊境市集</div>
                 </div>
+                <div class="map-card" id="eliteMapHarbor">
+                    <div class="map-name" style="font-size:16px;">海港工廠</div>
+                    <div class="map-desc">油槽區、貨櫃場與廢墟倉庫，碼頭邊的荒廢工業港</div>
+                </div>
             </div>
         </div>
         <div id="eliteStepTank" class="menu-step" style="display: none;"></div>
@@ -913,6 +917,10 @@
                         <div class="map-card" id="mapSnow">
                             <div class="map-name" style="font-size:16px;">霜雪市集</div>
                             <div class="map-desc">稀疏的鐵皮屋與雪松，冰天雪地的邊境市集</div>
+                        </div>
+                        <div class="map-card" id="mapHarbor">
+                            <div class="map-name" style="font-size:16px;">海港工廠</div>
+                            <div class="map-desc">油槽區、貨櫃場與廢墟倉庫，碼頭邊的荒廢工業港</div>
                         </div>
                     </div>
                     <div style="margin: 6px 0 10px; padding: 8px 12px; background: rgba(0,0,0,0.25); border: 1px solid #4a525a; border-radius: 8px;">
@@ -2113,6 +2121,7 @@ const tank = {
 mapPlains.addEventListener('click', () => { chosenMap = 'plains'; syncMapCards(); });
 mapCity.addEventListener('click', () => { chosenMap = 'city'; syncMapCards(); });
 document.getElementById('mapSnow').addEventListener('click', () => { chosenMap = 'snow'; syncMapCards(); });
+document.getElementById('mapHarbor').addEventListener('click', () => { chosenMap = 'harbor'; syncMapCards(); });
 
 let gameActive = false;
 let animationId = null;
@@ -3054,9 +3063,645 @@ function drawSnowfall() {
 }
 // ===================== 霜雪市集 結束 =====================
 
+// ===================== 海港工廠 =====================
+// 上緣是港口（水面、貨輪、碼頭與岸邊吊車，整條不可通行）；下方是油槽區（圓形儲油槽＋管線架）、
+// 貨櫃場、鐵皮倉庫、斷垣殘壁與枯樹。土地是乾燥的褐黃色，散布彈坑、油漬、帳篷營地與電線桿。
+const HF_WATER_H = 150, HF_QUAY_H = 212;
+let hfPads = [], hfRoads = [], hfFlat = [], hfProps = [], hfMacro = [], hfShips = [], hfCranes = [], hfWires = [];
+let hfGroundPattern = null, hfConcretePattern = null;
+const hfSprites = {}, hfBuildCache = new Map();
+
+function hfMk(w, h) { const c = document.createElement('canvas'); c.width = Math.ceil(w); c.height = Math.ceil(h); return [c, c.getContext('2d')]; }
+function hfSprite(key, w, h, fn, pix) {
+    let s = hfSprites[key]; if (s) return s;
+    pix = pix || 1; const [c, g] = hfMk(w * pix, h * pix); g.scale(pix, pix);
+    fn(g, mulberry32(key.split('').reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) | 0, 11)));
+    return (hfSprites[key] = c);
+}
+function hfRR(g, x, y, w, h, r) { r = Math.min(r, w / 2, h / 2); g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function hfShade(hex, f) {
+    const n = parseInt(hex.slice(1), 16); let r = n >> 16, gg = (n >> 8) & 255, b = n & 255; const t = f < 0 ? 0 : 255, p = Math.abs(f);
+    r = Math.round(r + (t - r) * p); gg = Math.round(gg + (t - gg) * p); b = Math.round(b + (t - b) * p); return `rgb(${r},${gg},${b})`;
+}
+function hfSoft(kind) {
+    return hfSprite('soft_' + kind, 128, 128, g => {
+        const c = kind === 'dark' ? '30,24,18' : kind === 'dust' ? '196,170,126' : '16,14,12';
+        const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+        gr.addColorStop(0, `rgba(${c},1)`); gr.addColorStop(0.55, `rgba(${c},0.55)`); gr.addColorStop(1, `rgba(${c},0)`);
+        g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+    });
+}
+function getHFGroundPattern() {
+    if (hfGroundPattern) return hfGroundPattern;
+    const S = 512, [c, g] = hfMk(S, S), rnd = mulberry32(77), R = (a, b) => a + rnd() * (b - a);
+    g.fillStyle = '#7d6c4f'; g.fillRect(0, 0, S, S);
+    const blob = (x, y, r, col, a) => {
+        g.globalAlpha = a; g.fillStyle = col;
+        for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) { if (x + ox + r < 0 || x + ox - r > S || y + oy + r < 0 || y + oy - r > S) continue; g.beginPath(); g.ellipse(x + ox, y + oy, r, r * R(0.6, 1), R(0, 3.14), 0, 6.283); g.fill(); }
+        g.globalAlpha = 1;
+    };
+    const cols = ['#6e5e43', '#8a785a', '#73684a', '#665a40'];
+    for (let i = 0; i < 70; i++) blob(R(0, S), R(0, S), R(30, 90), cols[i % 4], R(0.12, 0.28));
+    for (let i = 0; i < 40; i++) blob(R(0, S), R(0, S), R(18, 46), '#5d6a3a', R(0.1, 0.2));
+    for (let i = 0; i < 900; i++) { g.fillStyle = rnd() < 0.5 ? 'rgba(40,30,20,0.25)' : 'rgba(190,170,130,0.22)'; g.fillRect(R(0, S), R(0, S), R(1, 3), R(1, 2.5)); }
+    return (hfGroundPattern = ctx.createPattern(c, 'repeat'));
+}
+function getHFConcretePattern() {
+    if (hfConcretePattern) return hfConcretePattern;
+    const S = 256, [c, g] = hfMk(S, S), rnd = mulberry32(5);
+    g.fillStyle = '#585d64'; g.fillRect(0, 0, S, S);
+    for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? '255,255,255' : '0,0,0'},${0.03 + rnd() * 0.05})`; g.fillRect(rnd() * S, rnd() * S, 30 + rnd() * 90, 20 + rnd() * 70); }
+    for (let i = 0; i < 500; i++) { g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.16)' : 'rgba(255,255,255,0.10)'; g.fillRect(rnd() * S, rnd() * S, 1 + rnd() * 2, 1 + rnd() * 2); }
+    g.strokeStyle = 'rgba(0,0,0,0.30)'; g.lineWidth = 2; g.beginPath();
+    g.moveTo(0, 1); g.lineTo(S, 1); g.moveTo(0, S / 2); g.lineTo(S, S / 2); g.moveTo(1, 0); g.lineTo(1, S); g.moveTo(S / 2, 0); g.lineTo(S / 2, S); g.stroke();
+    return (hfConcretePattern = ctx.createPattern(c, 'repeat'));
+}
+
+// ───────── 精靈：儲油槽、臥式油罐 ─────────
+function hfTankSprite(kind, v) {
+    return hfSprite(`tank_${kind}_${v}`, 280, 280, (g, rnd) => {
+        const C = 140, Rr = 100, shell = ['#5d5967', '#686c72', '#7b5c4a', '#505e4d'][v % 4];
+        g.fillStyle = 'rgba(0,0,0,0.34)'; g.beginPath(); g.ellipse(C + 24, C + 28, Rr * 1.02, Rr * 0.98, 0, 0, 6.283); g.fill();
+        const wl = g.createLinearGradient(C - Rr, 0, C + Rr, 0); wl.addColorStop(0, hfShade(shell, -0.2)); wl.addColorStop(0.45, hfShade(shell, 0.12)); wl.addColorStop(1, hfShade(shell, -0.45));
+        g.fillStyle = wl; g.beginPath(); g.arc(C, C + 9, Rr, 0, 6.283); g.fill();
+        const lid = g.createRadialGradient(C - 30, C - 34, 6, C, C, Rr); lid.addColorStop(0, '#d7d4db'); lid.addColorStop(1, '#a29fa9');
+        g.fillStyle = lid; g.beginPath(); g.arc(C, C, Rr - 3, 0, 6.283); g.fill();
+        g.strokeStyle = 'rgba(55,52,62,0.7)'; g.lineWidth = 4; g.beginPath(); g.arc(C, C, Rr - 6, 0, 6.283); g.stroke();
+        g.save(); g.setLineDash([2, 7]); g.strokeStyle = 'rgba(30,28,36,0.65)'; g.lineWidth = 2; g.beginPath(); g.arc(C, C, Rr - 2, 0, 6.283); g.stroke(); g.restore();
+        if (kind === 'float') {
+            for (const f of [0.74, 0.46]) { g.strokeStyle = 'rgba(70,66,78,0.5)'; g.lineWidth = 2; g.beginPath(); g.arc(C, C, Rr * f, 0, 6.283); g.stroke(); }
+            g.fillStyle = '#8c8993'; g.beginPath(); g.arc(C, C, Rr * 0.17, 0, 6.283); g.fill(); g.strokeStyle = '#4c4955'; g.lineWidth = 3; g.stroke();
+            g.fillStyle = '#6a6773'; g.beginPath(); g.arc(C, C, Rr * 0.07, 0, 6.283); g.fill();
+            for (let i = 0; i < 4; i++) { const a = rnd() * 6.283, d = Rr * (0.3 + rnd() * 0.3); g.fillStyle = '#7e7b86'; g.beginPath(); g.arc(C + Math.cos(a) * d, C + Math.sin(a) * d, 4, 0, 6.283); g.fill(); }
+        } else {
+            g.strokeStyle = 'rgba(60,57,68,0.28)'; g.lineWidth = 2; g.beginPath();
+            for (let i = 0; i < 12; i++) { const a = i * 0.5236; g.moveTo(C + Math.cos(a) * Rr * 0.12, C + Math.sin(a) * Rr * 0.12); g.lineTo(C + Math.cos(a) * (Rr - 8), C + Math.sin(a) * (Rr - 8)); }
+            g.stroke();
+            const hl = g.createRadialGradient(C - 28, C - 30, 2, C - 28, C - 30, 50); hl.addColorStop(0, 'rgba(255,255,255,0.35)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+            g.fillStyle = hl; g.beginPath(); g.arc(C, C, Rr - 6, 0, 6.283); g.fill();
+            g.fillStyle = '#85828d'; g.beginPath(); g.arc(C, C, 11, 0, 6.283); g.fill(); g.strokeStyle = '#4c4955'; g.lineWidth = 2.5; g.stroke();
+        }
+        // 螺旋梯與走道
+        g.strokeStyle = '#4f4c58'; g.lineWidth = 6; g.beginPath(); g.arc(C, C, Rr - 1, 0.5, 2.3); g.stroke();
+        g.strokeStyle = 'rgba(220,218,225,0.6)'; g.lineWidth = 1.5; g.setLineDash([3, 5]); g.beginPath(); g.arc(C, C, Rr - 1, 0.5, 2.3); g.stroke(); g.setLineDash([]);
+        g.strokeStyle = '#dad7de'; g.lineWidth = 5; g.beginPath(); g.moveTo(C + Math.cos(2.3) * (Rr - 4), C + Math.sin(2.3) * (Rr - 4)); g.lineTo(C + Math.cos(2.3) * Rr * 0.22, C + Math.sin(2.3) * Rr * 0.22); g.stroke();
+        g.strokeStyle = 'rgba(50,48,58,0.55)'; g.lineWidth = 1; g.stroke();
+        // 鏽痕
+        for (let i = 0; i < 9; i++) { const a = rnd() * 6.283; g.strokeStyle = 'rgba(107,74,55,0.24)'; g.lineWidth = 2 + rnd() * 3; g.beginPath(); g.moveTo(C + Math.cos(a) * (Rr - 6), C + Math.sin(a) * (Rr - 6)); g.lineTo(C + Math.cos(a) * (Rr - 20 - rnd() * 18), C + Math.sin(a) * (Rr - 20 - rnd() * 18)); g.stroke(); }
+    }, 2);
+}
+function hfHCylSprite(v) {
+    return hfSprite('hcyl_' + v, 240, 120, g => {
+        const cx = 120, cy = 58, w = 200, h = 70;
+        g.fillStyle = 'rgba(0,0,0,0.34)'; hfRR(g, cx - w / 2 + 16, cy - h / 2 + 20, w, h, 34); g.fill();
+        g.fillStyle = '#3d3b3f'; for (const sx of [cx - w * 0.3, cx + w * 0.3]) g.fillRect(sx - 8, cy - h / 2 - 4, 16, h + 8);
+        const gr = g.createLinearGradient(0, cy - h / 2, 0, cy + h / 2); gr.addColorStop(0, v ? '#c9b8a6' : '#cbc8cd'); gr.addColorStop(0.45, v ? '#a58b76' : '#9d9aa2'); gr.addColorStop(1, v ? '#5d4739' : '#5f5c66');
+        g.fillStyle = gr; hfRR(g, cx - w / 2, cy - h / 2, w, h, 34); g.fill(); g.strokeStyle = '#4a4750'; g.lineWidth = 3; g.stroke();
+        g.fillStyle = 'rgba(0,0,0,0.2)'; for (let k = -2; k <= 2; k++) g.fillRect(cx + k * w * 0.19 - 2, cy - h / 2 + 2, 4, h - 4);
+        g.fillStyle = '#7d7a84'; g.beginPath(); g.arc(cx - 20, cy - 8, 8, 0, 6.283); g.fill(); g.stroke();
+        g.strokeStyle = 'rgba(255,255,255,0.3)'; g.lineWidth = 3; g.beginPath(); g.moveTo(cx - w / 2 + 24, cy - h / 2 + 10); g.lineTo(cx + w / 2 - 24, cy - h / 2 + 10); g.stroke();
+    }, 2);
+}
+
+// ───────── 精靈：倉庫、貨櫃、哨塔、圍牆、廢墟、枯樹 ─────────
+function getHFWareSprite(b) {
+    let sp = hfBuildCache.get(b); if (sp) return sp;
+    const M = 44, [c, g] = hfMk(b.w + M * 2, b.h + M * 2), rnd = mulberry32(b.seed), R = (a, z) => a + rnd() * (z - a);
+    const x = M, y = M, w = b.w, h = b.h, col = ['#80523f', '#5f6a74', '#58634e', '#8c8573', '#6d5a4b'][b.v % 5], long = w >= h;
+    g.fillStyle = 'rgba(0,0,0,0.34)'; g.fillRect(x + 14, y + 18, w, h);
+    g.fillStyle = hfShade(col, -0.4); g.fillRect(x - 3, y - 3, w + 6, h + 6);
+    g.fillStyle = col; g.fillRect(x, y, w, h);
+    const gr = long ? g.createLinearGradient(0, y, 0, y + h) : g.createLinearGradient(x, 0, x + w, 0);
+    gr.addColorStop(0, 'rgba(255,255,255,0.20)'); gr.addColorStop(0.5, 'rgba(255,255,255,0.20)'); gr.addColorStop(0.5, 'rgba(0,0,0,0.22)'); gr.addColorStop(1, 'rgba(0,0,0,0.22)');
+    g.fillStyle = gr; g.fillRect(x, y, w, h);
+    g.strokeStyle = 'rgba(0,0,0,0.20)'; g.lineWidth = 1.2; g.beginPath();
+    if (long) for (let t = 6; t < w; t += 11) { g.moveTo(x + t, y); g.lineTo(x + t, y + h); } else for (let t = 6; t < h; t += 11) { g.moveTo(x, y + t); g.lineTo(x + w, y + t); }
+    g.stroke();
+    g.strokeStyle = hfShade(col, -0.5); g.lineWidth = 4; g.beginPath();
+    if (long) { g.moveTo(x, y + h / 2); g.lineTo(x + w, y + h / 2); } else { g.moveTo(x + w / 2, y); g.lineTo(x + w / 2, y + h); }
+    g.stroke();
+    for (let i = 0; i < 7; i++) { g.fillStyle = `rgba(${R(70, 110) | 0},${R(40, 60) | 0},30,${R(0.10, 0.22)})`; g.beginPath(); g.ellipse(x + R(0, w), y + R(0, h), R(8, 22), R(5, 14), R(0, 3), 0, 6.283); g.fill(); }
+    const vn = 2 + Math.floor(rnd() * 3);
+    for (let i = 0; i < vn; i++) {
+        const vx = long ? x + w * (i + 0.5) / vn : x + w / 2 + (i % 2 ? 22 : -22), vy = long ? y + h / 2 + (i % 2 ? 20 : -20) : y + h * (i + 0.5) / vn;
+        g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(vx - 3, vy - 2, 14, 14); g.fillStyle = '#7d8187'; g.fillRect(vx - 7, vy - 7, 14, 14); g.fillStyle = '#34373b'; g.fillRect(vx - 4, vy - 4, 8, 8);
+    }
+    if (rnd() < 0.7) { g.fillStyle = 'rgba(176,206,214,0.5)'; if (long) g.fillRect(x + w * 0.2, y + h * 0.28 - 5, w * 0.6, 8); else g.fillRect(x + w * 0.28 - 5, y + h * 0.2, 8, h * 0.6); }
+    if (b.dmg) {   // 屋頂被炸開一角
+        const hx = x + R(0.15, 0.5) * w, hy = y + R(0.15, 0.45) * h, hw = R(0.28, 0.4) * w, hh = R(0.3, 0.42) * h;
+        g.fillStyle = '#1d1a18'; g.beginPath(); g.moveTo(hx, hy + hh * 0.2); g.lineTo(hx + hw * 0.3, hy); g.lineTo(hx + hw * 0.75, hy + hh * 0.12); g.lineTo(hx + hw, hy + hh * 0.55); g.lineTo(hx + hw * 0.7, hy + hh); g.lineTo(hx + hw * 0.2, hy + hh * 0.85); g.closePath(); g.fill();
+        g.strokeStyle = '#3a2b20'; g.lineWidth = 3; for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(hx + R(0, hw), hy + R(0, hh)); g.lineTo(hx + R(0, hw), hy + R(0, hh)); g.stroke(); }
+        g.fillStyle = 'rgba(20,16,14,0.35)'; g.beginPath(); g.ellipse(hx + hw / 2, hy + hh / 2, hw * 0.8, hh * 0.8, 0, 0, 6.283); g.fill();
+    }
+    g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 3; g.strokeRect(x, y, w, h);
+    sp = { canvas: c, M }; hfBuildCache.set(b, sp); return sp;
+}
+function getHFContSprite(b) {
+    let sp = hfBuildCache.get(b); if (sp) return sp;
+    const M = 30, [c, g] = hfMk(b.w + M * 2, b.h + M * 2), rnd = mulberry32(b.seed), cols = ['#9a3b2f', '#2f5c88', '#3f6b4d', '#b8742f', '#c2a42f', '#7a7f85', '#7d4f3c', '#cfd3d6', '#8a3a52'], units = [];
+    for (let ci = 0; ci < b.cols; ci++) for (let rj = 0; rj < b.rows; rj++) units.push(b.vert ? { x: rj * 38, y: ci * 92, w: 34, h: 88 } : { x: ci * 92, y: rj * 38, w: 88, h: 34 });
+    g.fillStyle = 'rgba(0,0,0,0.32)'; for (const u of units) g.fillRect(M + u.x + 9, M + u.y + 11, u.w, u.h);
+    for (const u of units) {
+        const col = cols[Math.floor(rnd() * cols.length)], ux = M + u.x, uy = M + u.y, long = u.w > u.h;
+        g.fillStyle = col; g.fillRect(ux, uy, u.w, u.h);
+        g.fillStyle = `rgba(255,255,255,${0.03 + rnd() * 0.1})`; g.fillRect(ux, uy, u.w, u.h);
+        g.strokeStyle = 'rgba(0,0,0,0.2)'; g.lineWidth = 1; g.beginPath();
+        if (long) for (let t = 5; t < u.w - 8; t += 5) { g.moveTo(ux + t, uy + 2); g.lineTo(ux + t, uy + u.h - 2); } else for (let t = 5; t < u.h - 8; t += 5) { g.moveTo(ux + 2, uy + t); g.lineTo(ux + u.w - 2, uy + t); }
+        g.stroke();
+        g.fillStyle = 'rgba(0,0,0,0.25)'; if (long) g.fillRect(ux + u.w - 8, uy, 8, u.h); else g.fillRect(ux, uy + u.h - 8, u.w, 8);
+        g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 1.2; g.strokeRect(ux + 0.6, uy + 0.6, u.w - 1.2, u.h - 1.2);
+        g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 1.5; g.strokeRect(ux, uy, u.w, u.h);
+        if (rnd() < 0.35) { g.fillStyle = 'rgba(110,60,30,0.28)'; g.fillRect(ux + rnd() * (u.w - 14), uy + rnd() * (u.h - 8), 6 + rnd() * 12, 4 + rnd() * 6); }
+    }
+    sp = { canvas: c, M }; hfBuildCache.set(b, sp); return sp;
+}
+function getHFTowerSprite(b) {
+    let sp = hfBuildCache.get(b); if (sp) return sp;
+    const M = 36, [c, g] = hfMk(b.w + M * 2, b.h + M * 2), x = M, y = M, w = b.w, h = b.h, roof = ['#8a4b3a', '#5f6b4a', '#6a6d73'][b.v % 3], o = 5, cx = x + w / 2, cy = y + h / 2;
+    g.fillStyle = 'rgba(0,0,0,0.34)'; g.fillRect(x + 12, y + 16, w, h);
+    g.fillStyle = '#7e786c'; g.fillRect(x, y, w, h); g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 2; g.strokeRect(x, y, w, h);
+    g.fillStyle = hfShade(roof, -0.2); g.fillRect(x - o, y - o, w + o * 2, h + o * 2);
+    const tri = (x0, y0, x1, y1, f) => { g.fillStyle = hfShade(roof, f); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.lineTo(cx, cy); g.closePath(); g.fill(); };
+    tri(x - o, y - o, x + w + o, y - o, 0.15); tri(x + w + o, y - o, x + w + o, y + h + o, -0.1); tri(x + w + o, y + h + o, x - o, y + h + o, -0.3); tri(x - o, y + h + o, x - o, y - o, 0.0);
+    g.strokeStyle = 'rgba(0,0,0,0.45)'; g.lineWidth = 1.5; g.strokeRect(x - o, y - o, w + o * 2, h + o * 2);
+    g.fillStyle = '#d5d2c8'; g.beginPath(); g.arc(cx, cy, 4, 0, 6.283); g.fill(); g.fillStyle = '#c0392b'; g.beginPath(); g.arc(cx, cy, 2, 0, 6.283); g.fill();
+    sp = { canvas: c, M }; hfBuildCache.set(b, sp); return sp;
+}
+function getHFWallSprite(b) {
+    let sp = hfBuildCache.get(b); if (sp) return sp;
+    const M = 18, [c, g] = hfMk(b.w + M * 2, b.h + M * 2), rnd = mulberry32(b.seed), x = M, y = M, w = b.w, h = b.h, horiz = w >= h;
+    g.fillStyle = 'rgba(0,0,0,0.30)'; g.fillRect(x + 6, y + 9, w, h);
+    g.fillStyle = '#9b968a'; g.fillRect(x, y, w, h);
+    g.fillStyle = 'rgba(255,255,255,0.22)'; if (horiz) g.fillRect(x, y, w, 4); else g.fillRect(x, y, 4, h);
+    g.strokeStyle = 'rgba(0,0,0,0.32)'; g.lineWidth = 1.5; g.beginPath();
+    if (horiz) for (let t = 30; t < w; t += 30) { g.moveTo(x + t, y); g.lineTo(x + t, y + h); } else for (let t = 30; t < h; t += 30) { g.moveTo(x, y + t); g.lineTo(x + w, y + t); }
+    g.stroke();
+    g.strokeStyle = 'rgba(30,30,32,0.7)'; g.lineWidth = 1.4; g.beginPath();   // 鐵絲網
+    if (horiz) { g.moveTo(x, y + h / 2); for (let t = 0; t < w; t += 8) g.lineTo(x + t + 4, y + h / 2 + (t % 16 ? -4 : 4)); } else { g.moveTo(x + w / 2, y); for (let t = 0; t < h; t += 8) g.lineTo(x + w / 2 + (t % 16 ? -4 : 4), y + t + 4); }
+    g.stroke();
+    if (b.brk) {
+        const bx = horiz ? x + w * (0.3 + rnd() * 0.4) : x, by = horiz ? y : y + h * (0.3 + rnd() * 0.4), bw = horiz ? 22 + rnd() * 24 : w, bh = horiz ? h : 22 + rnd() * 24;
+        g.clearRect(bx - 2, by - 2, bw + 4, bh + 4);
+        g.fillStyle = 'rgba(80,72,62,0.85)'; for (let i = 0; i < 5; i++) g.fillRect(bx + rnd() * bw - 3, by + rnd() * bh, 4 + rnd() * 5, 3 + rnd() * 4);
+    } else { g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 1.5; g.strokeRect(x, y, w, h); }
+    sp = { canvas: c, M }; hfBuildCache.set(b, sp); return sp;
+}
+function getHFRuinSprite(b) {
+    let sp = hfBuildCache.get(b); if (sp) return sp;
+    const M = 40, [c, g] = hfMk(b.w + M * 2, b.h + M * 2), rnd = mulberry32(b.seed), R = (a, z) => a + rnd() * (z - a), x = M, y = M, w = b.w, h = b.h;
+    g.fillStyle = 'rgba(0,0,0,0.30)'; g.fillRect(x + 10, y + 14, w, h);
+    g.fillStyle = '#4b4038'; g.beginPath(); g.moveTo(x + 6, y + 14); g.lineTo(x + w * 0.4, y); g.lineTo(x + w - 8, y + 10); g.lineTo(x + w, y + h * 0.6); g.lineTo(x + w - 14, y + h); g.lineTo(x + w * 0.3, y + h - 4); g.lineTo(x, y + h * 0.55); g.closePath(); g.fill();
+    g.fillStyle = '#70675c'; g.fillRect(x + 14, y + 14, w - 28, h - 28);
+    const wall = (x0, y0, w0, h0) => {
+        g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x0 + 5, y0 + 6, w0, h0); g.fillStyle = '#8b5d49'; g.fillRect(x0, y0, w0, h0);
+        g.strokeStyle = 'rgba(40,24,16,0.45)'; g.lineWidth = 1; g.beginPath();
+        if (w0 > h0) for (let t = 6; t < h0; t += 6) { g.moveTo(x0, y0 + t); g.lineTo(x0 + w0, y0 + t); } else for (let t = 6; t < w0; t += 6) { g.moveTo(x0 + t, y0); g.lineTo(x0 + t, y0 + h0); }
+        g.stroke(); g.fillStyle = 'rgba(255,255,255,0.14)'; if (w0 > h0) g.fillRect(x0, y0, w0, 2.5); else g.fillRect(x0, y0, 2.5, h0);
+    };
+    for (let side = 0; side < 4; side++) {
+        if (rnd() < 0.25) continue;
+        const horiz = side % 2 === 0, len = horiz ? w : h, a0 = R(0, 0.25) * len, a1 = R(0.45, 0.75) * len;
+        const segs = rnd() < 0.5 ? [[a0, a1]] : [[a0, a0 + (a1 - a0) * 0.45], [a0 + (a1 - a0) * 0.65, a1 + len * 0.15]];
+        for (const [s0, s1] of segs) { const l = Math.min(s1, len) - s0; if (l < 14) continue; if (horiz) wall(x + s0, side === 0 ? y : y + h - 14, l, 14); else wall(side === 1 ? x + w - 14 : x, y + s0, 14, l); }
+    }
+    g.strokeStyle = '#3b2a1e'; g.lineWidth = 5; for (let i = 0; i < 4; i++) { const ax = x + R(10, w - 10), ay = y + R(10, h - 10), an = R(0, 6.283), l = R(30, 70); g.beginPath(); g.moveTo(ax, ay); g.lineTo(ax + Math.cos(an) * l, ay + Math.sin(an) * l); g.stroke(); }
+    const pc = ['#8b5d49', '#7a7066', '#5f564e', '#9a8f80', '#4a403a'];
+    for (let i = 0; i < Math.round(w * h / 280); i++) { g.fillStyle = pc[Math.floor(rnd() * 5)]; g.save(); g.translate(x + R(-10, w + 10), y + R(-10, h + 10)); g.rotate(rnd() * 3); g.fillRect(0, 0, R(4, 11), R(3, 7)); g.restore(); }
+    g.fillStyle = 'rgba(15,12,10,0.28)'; for (let i = 0; i < 3; i++) { g.beginPath(); g.ellipse(x + R(0, w), y + R(0, h), R(14, 36), R(10, 26), R(0, 3), 0, 6.283); g.fill(); }
+    sp = { canvas: c, M }; hfBuildCache.set(b, sp); return sp;
+}
+function getHFTreeSprite(kind, v) {
+    return hfSprite(`tree_${kind}_${v}`, 130, 130, (g, rnd) => {
+        const C = 65, R = (a, z) => a + rnd() * (z - a);
+        g.fillStyle = 'rgba(0,0,0,0.26)'; g.beginPath(); g.ellipse(C + 14, C + 16, 34, 28, 0, 0, 6.283); g.fill();
+        const branch = (x, y, a, len, wd, depth) => {
+            const nx = x + Math.cos(a) * len, ny = y + Math.sin(a) * len;
+            g.strokeStyle = '#4a3a2c'; g.lineWidth = wd; g.lineCap = 'round'; g.beginPath(); g.moveTo(x, y); g.lineTo(nx, ny); g.stroke();
+            if (depth > 0) { branch(nx, ny, a + R(0.3, 0.8), len * R(0.6, 0.8), wd * 0.7, depth - 1); branch(nx, ny, a - R(0.3, 0.8), len * R(0.6, 0.8), wd * 0.7, depth - 1); if (rnd() < 0.4) branch(nx, ny, a + R(-0.2, 0.2), len * 0.6, wd * 0.6, depth - 1); }
+        };
+        if (kind === 'dead') {
+            for (let i = 0; i < 5 + (v % 2); i++) branch(C, C, i * 1.2566 + R(-0.3, 0.3), R(12, 18), 3.2, 3);
+            g.fillStyle = '#3a2c20'; g.beginPath(); g.arc(C, C, 5, 0, 6.283); g.fill();
+        } else {
+            for (let i = 0; i < 4; i++) branch(C, C, i * 1.57 + R(-0.4, 0.4), R(10, 16), 3, 2);
+            const pal = ['#a8571f', '#c27a2a', '#7e4a22', '#b86a25', '#6a5a2a'];
+            for (let i = 0; i < 26; i++) { const a = rnd() * 6.283, d = Math.pow(rnd(), 0.7) * 34; g.fillStyle = pal[Math.floor(rnd() * pal.length)]; g.globalAlpha = R(0.7, 0.95); g.beginPath(); g.arc(C + Math.cos(a) * d, C + Math.sin(a) * d, R(7, 14), 0, 6.283); g.fill(); }
+            g.globalAlpha = 1; g.fillStyle = 'rgba(30,20,10,0.25)'; g.beginPath(); g.arc(C + 8, C + 8, 22, 0, 6.283); g.fill();
+        }
+    });
+}
+
+// ───────── 精靈：地面小物件、帳篷 ─────────
+function hfPropSprite(kind, v) {
+    const sizes = { tent: [110, 90], pipes: [100, 60], pole: [100, 100], pallet: [60, 50] }, sz = sizes[kind] || [60, 60], w = sz[0], h = sz[1];
+    return hfSprite(`prop_${kind}_${v}`, w, h, (g, rnd) => {
+        const cx = w / 2, cy = h / 2, R = (a, z) => a + rnd() * (z - a);
+        if (kind === 'drum') {
+            const col = ['#a8402f', '#2f5f94', '#4a6a45', '#b79b33', '#6b6f74', '#7a4a2e'][v % 6];
+            g.fillStyle = 'rgba(0,0,0,0.32)'; g.beginPath(); g.arc(cx + 4, cy + 5, 10, 0, 6.283); g.fill();
+            g.fillStyle = col; g.beginPath(); g.arc(cx, cy, 10, 0, 6.283); g.fill(); g.strokeStyle = hfShade(col, -0.4); g.lineWidth = 2; g.stroke();
+            g.strokeStyle = hfShade(col, 0.3); g.lineWidth = 1.5; g.beginPath(); g.arc(cx, cy, 6.5, 0, 6.283); g.stroke();
+            g.fillStyle = hfShade(col, -0.5); g.beginPath(); g.arc(cx + 3, cy - 2, 1.6, 0, 6.283); g.fill(); g.beginPath(); g.arc(cx - 3, cy + 3, 1.4, 0, 6.283); g.fill();
+        } else if (kind === 'crate') {
+            const s = 22 + (v % 3) * 5;
+            g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(cx - s / 2 + 4, cy - s / 2 + 5, s, s);
+            g.fillStyle = '#8b6a45'; g.fillRect(cx - s / 2, cy - s / 2, s, s); g.strokeStyle = '#4a3622'; g.lineWidth = 1.6; g.strokeRect(cx - s / 2, cy - s / 2, s, s);
+            g.beginPath(); g.moveTo(cx - s / 2, cy - s / 6); g.lineTo(cx + s / 2, cy - s / 6); g.moveTo(cx - s / 2, cy + s / 6); g.lineTo(cx + s / 2, cy + s / 6); g.moveTo(cx - s / 2, cy - s / 2); g.lineTo(cx + s / 2, cy + s / 2); g.stroke();
+        } else if (kind === 'pallet') {
+            g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(cx - 18 + 4, cy - 14 + 5, 36, 28);
+            g.fillStyle = '#6b5236'; g.fillRect(cx - 18, cy - 14, 36, 28);
+            for (let i = 0; i < 5; i++) { g.fillStyle = '#a98a5b'; g.fillRect(cx - 18, cy - 14 + i * 6, 36, 4.2); }
+            g.strokeStyle = 'rgba(40,28,16,0.6)'; g.lineWidth = 1; g.strokeRect(cx - 18, cy - 14, 36, 28);
+        } else if (kind === 'pipes') {
+            for (let i = 0; i < 4; i++) {
+                const py = cy - 14 + i * 9, len = 76 - (i % 2) * 8, ox = (i % 2) * 4;
+                g.fillStyle = 'rgba(0,0,0,0.28)'; g.fillRect(cx - len / 2 + ox + 4, py - 4 + 5, len, 9);
+                const pg = g.createLinearGradient(0, py - 4, 0, py + 4); pg.addColorStop(0, '#9aa0a6'); pg.addColorStop(1, i % 2 ? '#6b5a4a' : '#4f5459');
+                g.fillStyle = pg; g.fillRect(cx - len / 2 + ox, py - 4, len, 8);
+            }
+        } else if (kind === 'pole') {
+            g.strokeStyle = 'rgba(0,0,0,0.28)'; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + 26, cy + 34); g.stroke();
+            g.lineWidth = 3; g.beginPath(); g.moveTo(cx - 14 + 14, cy - 18 + 22); g.lineTo(cx + 18 + 14, cy + 18 + 22); g.stroke();
+            g.strokeStyle = '#5a4632'; g.lineWidth = 3; g.beginPath(); g.moveTo(cx - 18, cy); g.lineTo(cx + 18, cy); g.stroke();
+            g.fillStyle = '#3b2d22'; g.beginPath(); g.arc(cx, cy, 3.6, 0, 6.283); g.fill();
+            g.fillStyle = '#9db0b0'; for (const dx of [-16, -8, 8, 16]) { g.beginPath(); g.arc(cx + dx, cy, 1.5, 0, 6.283); g.fill(); }
+        } else if (kind === 'bush') {
+            const pal = ['#59592f', '#6b5a2e', '#4d5a2e', '#7a6a3a'];
+            g.fillStyle = 'rgba(0,0,0,0.22)'; g.beginPath(); g.ellipse(cx + 5, cy + 6, 18, 14, 0, 0, 6.283); g.fill();
+            for (let i = 0; i < 7; i++) { const a = rnd() * 6.283, d = rnd() * 10; g.fillStyle = pal[(i + v) % 4]; g.beginPath(); g.arc(cx + Math.cos(a) * d, cy + Math.sin(a) * d, R(7, 13), 0, 6.283); g.fill(); }
+            g.strokeStyle = 'rgba(40,30,14,0.45)'; g.lineWidth = 1; for (let i = 0; i < 6; i++) { const a = rnd() * 6.283; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * R(8, 16), cy + Math.sin(a) * R(8, 16)); g.stroke(); }
+        } else if (kind === 'rock') {
+            g.fillStyle = 'rgba(0,0,0,0.26)'; g.beginPath(); g.ellipse(cx + 5, cy + 6, 16, 12, 0, 0, 6.283); g.fill();
+            g.fillStyle = '#7d7468'; g.beginPath(); for (let i = 0; i < 8; i++) { const a = i * 0.785 + R(-0.2, 0.2), d = R(9, 15); i ? g.lineTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d) : g.moveTo(cx + Math.cos(a) * d, cy + Math.sin(a) * d); } g.closePath(); g.fill();
+            g.fillStyle = 'rgba(255,255,255,0.16)'; g.beginPath(); g.ellipse(cx - 3, cy - 3, 7, 5, -0.5, 0, 6.283); g.fill();
+        } else if (kind === 'tire') {
+            g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.arc(cx + 4, cy + 5, 11, 0, 6.283); g.fill();
+            for (let i = 0; i < 2; i++) { g.fillStyle = i ? '#2b2b2f' : '#222226'; g.beginPath(); g.arc(cx - i * 3, cy - i * 3, 11, 0, 6.283); g.fill(); }
+            g.fillStyle = '#4a4a50'; g.beginPath(); g.arc(cx - 3, cy - 3, 5, 0, 6.283); g.fill();
+        } else if (kind === 'tent') {
+            const tw = 74, th = 50, x = cx - tw / 2, y = cy - th / 2, col = ['#5d6540', '#6f6a4a', '#4f5a48'][v % 3];
+            g.strokeStyle = 'rgba(40,34,24,0.7)'; g.lineWidth = 1;
+            for (const [sx, sy, ex, ey] of [[x - 14, y - 10, x, y + 4], [x + tw + 14, y - 10, x + tw, y + 4], [x - 14, y + th + 10, x, y + th - 4], [x + tw + 14, y + th + 10, x + tw, y + th - 4]]) { g.beginPath(); g.moveTo(sx, sy); g.lineTo(ex, ey); g.stroke(); }
+            g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + 8, y + 10, tw, th);
+            g.fillStyle = hfShade(col, 0.12); g.fillRect(x, y, tw, th / 2); g.fillStyle = hfShade(col, -0.2); g.fillRect(x, y + th / 2, tw, th / 2);
+            g.strokeStyle = 'rgba(0,0,0,0.22)'; g.lineWidth = 1; g.beginPath(); for (let t = 12; t < tw; t += 14) { g.moveTo(x + t, y); g.lineTo(x + t, y + th); } g.stroke();
+            g.strokeStyle = hfShade(col, -0.5); g.lineWidth = 2.5; g.beginPath(); g.moveTo(x, cy); g.lineTo(x + tw, cy); g.stroke();
+            g.fillStyle = '#23251a'; g.beginPath(); g.moveTo(x + tw, cy - 11); g.lineTo(x + tw - 9, cy); g.lineTo(x + tw, cy + 11); g.closePath(); g.fill();
+            g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 1.5; g.strokeRect(x, y, tw, th);
+            g.fillStyle = 'rgba(255,255,255,0.14)'; g.fillRect(x + 6, y + 3, tw * 0.5, 3);
+        }
+    });
+}
+
+// ───────── 精靈：貨輪、岸邊吊車 ─────────
+function hfShipSprite(v) {
+    return hfSprite('ship_' + v, 680, 150, (g, rnd) => {
+        const cy = 75, hullCol = v ? '#7b2e26' : '#2f4a63';
+        const path = (i, dx, dy) => { g.beginPath(); g.moveTo(40 + i + dx, cy - 50 + i + dy); g.lineTo(500 + dx, cy - 50 + i + dy); g.quadraticCurveTo(615 - i + dx, cy - 38 + i * 0.6 + dy, 650 - i * 2 + dx, cy + dy); g.quadraticCurveTo(615 - i + dx, cy + 38 - i * 0.6 + dy, 500 + dx, cy + 50 - i + dy); g.lineTo(40 + i + dx, cy + 50 - i + dy); g.closePath(); };
+        g.fillStyle = 'rgba(0,0,0,0.28)'; path(0, 10, 12); g.fill();
+        g.strokeStyle = 'rgba(255,255,255,0.3)'; g.lineWidth = 5; path(-3, 0, 0); g.stroke();
+        g.fillStyle = hullCol; path(0, 0, 0); g.fill(); g.strokeStyle = '#1b1f24'; g.lineWidth = 2.5; g.stroke();
+        g.fillStyle = '#62665f'; path(8, 0, 0); g.fill(); g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 1.5; g.stroke();
+        const cc = ['#9a3b2f', '#2f5c88', '#3f6b4d', '#b8742f', '#c2a42f', '#7a7f85', '#cfd3d6'];
+        for (let i = 0; i < 5; i++) {
+            const x = 140 + i * 76; g.fillStyle = '#34373a'; g.fillRect(x, cy - 33, 66, 66);
+            for (let ci = 0; ci < 2; ci++) for (let ri = 0; ri < 5; ri++) { g.fillStyle = cc[Math.floor(rnd() * cc.length)]; g.fillRect(x + 3 + ci * 30, cy - 31 + ri * 12.6, 28, 11); g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 1; g.strokeRect(x + 3 + ci * 30, cy - 31 + ri * 12.6, 28, 11); }
+        }
+        g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(62, cy - 32, 70, 70);
+        g.fillStyle = '#dcdbd2'; g.fillRect(54, cy - 36, 70, 72); g.strokeStyle = '#6a6a64'; g.lineWidth = 2; g.strokeRect(54, cy - 36, 70, 72);
+        g.fillStyle = '#c3c2b8'; g.fillRect(62, cy - 28, 54, 56);
+        g.fillStyle = '#a8332a'; g.beginPath(); g.arc(96, cy, 15, 0, 6.283); g.fill(); g.fillStyle = '#1d1d1f'; g.beginPath(); g.arc(96, cy, 10, 0, 6.283); g.fill();
+        g.fillStyle = '#8b8e94'; g.beginPath(); g.arc(72, cy - 18, 6, 0, 6.283); g.fill();
+        g.strokeStyle = '#3d4044'; g.lineWidth = 2; g.beginPath(); g.moveTo(560, cy); g.lineTo(600, cy); g.stroke();
+    });
+}
+function hfCraneSprite() {
+    return hfSprite('crane', 140, 230, g => {
+        g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(70, 8, 14, 150);
+        g.fillStyle = '#c9c6bd'; g.fillRect(63, 0, 14, 152); g.strokeStyle = '#6c6a64'; g.lineWidth = 1.2; g.beginPath();
+        for (let y = 4; y < 148; y += 10) { g.moveTo(63, y); g.lineTo(77, y + 10); g.moveTo(77, y); g.lineTo(63, y + 10); } g.stroke(); g.strokeStyle = '#55534d'; g.strokeRect(63, 0, 14, 152);
+        g.fillStyle = '#8a8f94'; g.fillRect(8, 138, 124, 8); g.fillRect(8, 168, 124, 8);
+        g.fillStyle = '#2d2f33'; for (const [x, y] of [[4, 134], [128, 134], [4, 164], [128, 164]]) g.fillRect(x, y, 10, 16);
+        g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(54, 134, 48, 44);
+        g.fillStyle = '#d6a21f'; g.fillRect(46, 126, 48, 44); g.strokeStyle = '#6b5210'; g.lineWidth = 2; g.strokeRect(46, 126, 48, 44);
+        g.strokeStyle = 'rgba(120,90,10,0.6)'; g.lineWidth = 1; g.beginPath(); for (let x = 54; x < 94; x += 8) { g.moveTo(x, 128); g.lineTo(x, 168); } g.stroke();
+        g.fillStyle = '#b03a2e'; g.fillRect(46, 126, 48, 6); g.fillStyle = '#8cb2c0'; g.fillRect(52, 142, 14, 10);
+        g.fillStyle = '#b03a2e'; g.fillRect(56, 190, 28, 32); g.strokeStyle = '#5a1d16'; g.strokeRect(56, 190, 28, 32); g.fillStyle = '#8a8f94'; g.fillRect(67, 172, 6, 18);
+    });
+}
+
+// ───────── 地圖生成 ─────────
+function generateHarborMap() {
+    const W = MAP_WIDTH, H = MAP_HEIGHT, k15 = Math.pow(mapScale, 1.5), k135 = Math.pow(mapScale, 1.35), rnd = Math.random, R = (a, b) => a + rnd() * (b - a);
+    hfPads = []; hfRoads = []; hfFlat = []; hfProps = []; hfMacro = []; hfShips = []; hfCranes = []; hfWires = []; hfBuildCache.clear();
+    const XL = 380, XR = W - 380, YT = HF_QUAY_H + 60, YB = H - 90, seedOf = () => Math.floor(rnd() * 1e9) + 1;
+    buildings.push({ x: 0, y: 0, w: W, h: HF_QUAY_H, hk: 'quay' });   // 水域 + 碼頭：整條都是不可通行的邊界
+
+    // 港口：貨輪、吊車（純裝飾，位於不可通行區）
+    const shipN = Math.max(1, Math.round(W / 1700)), craneN = Math.max(2, Math.round(W / 800));
+    for (let i = 0; i < shipN; i++) hfShips.push({ x: W * (i + 0.5) / shipN + R(-100, 100), v: i % 2, flip: rnd() < 0.5 });
+    for (let i = 0; i < craneN; i++) hfCranes.push(W * (i + 0.5) / craneN + R(-60, 60));
+
+    // 道路：臨港道路、主幹道、數條縱向土路
+    const wavy = (horizontal, base, A, lam, len) => { const ph = rnd() * 6.283, pts = []; for (let t = -100; t <= len + 100; t += 110) { const off = base + Math.sin(t / lam + ph) * A; pts.push(horizontal ? { x: t, y: off } : { x: off, y: t }); } return pts; };
+    hfRoads.push({ pts: wavy(true, HF_QUAY_H + 84, 6, 900, W), w: 64, kind: 'asphalt' });
+    hfRoads.push({ pts: wavy(true, H * R(0.54, 0.66), 36, 700, W), w: 76, kind: 'asphalt' });
+    const vN = Math.min(7, 2 + Math.floor(mapScale * 0.8));
+    for (let i = 0; i < vN; i++) hfRoads.push({ pts: wavy(false, W * (0.18 + 0.64 * (i + 0.5 + R(-0.25, 0.25)) / vN), 46, 600, H), w: 52, kind: 'dirt' });
+    for (const rd of hfRoads) { const xs = rd.pts.map(q => q.x), ys = rd.pts.map(q => q.y); rd.x0 = Math.min(...xs); rd.x1 = Math.max(...xs); rd.y0 = Math.min(...ys); rd.y1 = Math.max(...ys); rd.horiz = (rd.x1 - rd.x0) > (rd.y1 - rd.y0); }
+    const segDist = (px, py, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy || 1; let t = ((px - a.x) * dx + (py - a.y) * dy) / L2; t = Math.max(0, Math.min(1, t)); return Math.hypot(px - (a.x + dx * t), py - (a.y + dy * t)); };
+    const nearRoad = (x, y, m) => { for (const rd of hfRoads) { const lim = rd.w / 2 + m; if (x < rd.x0 - lim || x > rd.x1 + lim || y < rd.y0 - lim || y > rd.y1 + lim) continue; for (let i = 0; i < rd.pts.length - 1; i++) if (segDist(x, y, rd.pts[i], rd.pts[i + 1]) < lim) return true; } return false; };
+    const nearRoadRect = (x0, y0, x1, y1, m) => { for (let x = x0; x <= x1 + 40; x += 70) for (let y = y0; y <= y1 + 40; y += 70) if (nearRoad(Math.min(x, x1), Math.min(y, y1), m)) return true; return false; };
+    const BG = 300, bGrid = new Map(); let bIndexed = 0;
+    const bKey = (cx, cy) => cx * 100003 + cy;
+    const hitB = (x0, y0, x1, y1) => {
+        for (; bIndexed < buildings.length; bIndexed++) {   // 增量索引新加入的建築
+            const b = buildings[bIndexed]; if (b.hk === 'quay') continue;
+            for (let cx = Math.floor(b.x / BG); cx <= Math.floor((b.x + b.w) / BG); cx++) for (let cy = Math.floor(b.y / BG); cy <= Math.floor((b.y + b.h) / BG); cy++) { const k = bKey(cx, cy); let a = bGrid.get(k); if (!a) bGrid.set(k, a = []); a.push(b); }
+        }
+        for (let cx = Math.floor(x0 / BG); cx <= Math.floor(x1 / BG); cx++) for (let cy = Math.floor(y0 / BG); cy <= Math.floor(y1 / BG); cy++) { const a = bGrid.get(bKey(cx, cy)); if (a) for (const b of a) if (x0 < b.x + b.w && x1 > b.x && y0 < b.y + b.h && y1 > b.y) return true; }
+        return false;
+    };
+    const inPad = (x, y, m) => hfPads.some(p => x > p.x - m && x < p.x + p.w + m && y > p.y - m && y < p.y + p.h + m);
+    const padNear = (x0, y0, x1, y1, m) => hfPads.some(p => x0 < p.x + p.w + m && x1 > p.x - m && y0 < p.y + p.h + m && y1 > p.y - m);
+
+    // 油槽區：混凝土地坪上兩排圓形儲油槽，中間是管線架
+    const clusterN = Math.max(3, Math.round(2.8 * k135));
+    for (let i = 0; i < clusterN; i++) {
+        for (let attempt = 0; attempt < 50; attempt++) {
+            const nCols = 2 + Math.floor(rnd() * 3), top = [], bot = [];
+            for (let c = 0; c < nCols; c++) { top.push(rnd() < 0.5 ? R(170, 225) : R(120, 160)); bot.push(rnd() < 0.5 ? R(170, 225) : R(120, 160)); }
+            const colW = top.map((d, c) => Math.max(d, bot[c])), gap = R(84, 116), mg = 46, rackGap = 100;
+            const pw = colW.reduce((a, b) => a + b, 0) + gap * (nCols - 1) + mg * 2, hT = Math.max(...top), hB = Math.max(...bot), ph = hT + hB + rackGap + mg * 2;
+            if (pw > XR - XL || ph > YB - YT - 80) continue;
+            const px = R(XL, XR - pw), py = R(YT + 40, YB - ph);
+            if (padNear(px, py, px + pw, py + ph, 140) || nearRoadRect(px - 40, py - 40, px + pw + 40, py + ph + 40, 20)) continue;
+            const rackY = py + mg + hT + rackGap / 2, tanks = []; let cx = px + mg;
+            for (let c = 0; c < nCols; c++) {
+                const mid = cx + colW[c] / 2;
+                [[top[c], -1], [bot[c], 1]].forEach(([d, sgn]) => {
+                    if (rnd() < 0.08) return;
+                    const ty = rackY + sgn * (rackGap / 2 + d / 2), s = d * 0.8;
+                    tanks.push({ cx: mid, cy: ty, d });
+                    buildings.push({ x: mid - s / 2, y: ty - s / 2, w: s, h: s, hk: 'tank', d, tk: rnd() < 0.6 ? 'float' : 'dome', tv: Math.floor(rnd() * 4) });
+                });
+                cx += colW[c] + gap;
+            }
+            const stains = [], cracks = [];
+            for (let s = 0; s < 8; s++) stains.push({ x: px + R(20, pw - 20), y: py + R(20, ph - 20), rx: R(14, 44), ry: R(10, 30), rot: R(0, 3), a: R(0.12, 0.3) });
+            for (let s = 0; s < 5; s++) { const pts = []; let x = px + R(20, pw - 20), y = py + R(20, ph - 20), a = R(0, 6.283); for (let k = 0; k < 6; k++) { pts.push({ x, y }); a += R(-0.7, 0.7); x += Math.cos(a) * R(20, 40); y += Math.sin(a) * R(20, 40); } cracks.push(pts); }
+            hfPads.push({ x: px, y: py, w: pw, h: ph, rackY, tanks, stains, cracks, leadL: rnd() < 0.8 ? Math.min(R(120, 380), px - 150) : 0, leadR: rnd() < 0.8 ? Math.min(R(120, 380), W - px - pw - 150) : 0 });
+            // 圍牆（只圍兩側並留出缺口）與哨塔
+            const putWall = (x, y, w, h) => { if (hitB(x - 30, y - 30, x + w + 30, y + h + 30) || nearRoad(x + w / 2, y + h / 2, 22)) return; buildings.push({ x, y, w, h, hk: 'wall', seed: seedOf(), brk: rnd() < 0.3 }); };
+            const sides = [0, 1, 2, 3].sort(() => rnd() - 0.5).slice(0, 2);
+            for (const s of sides) {
+                const horiz = s < 2, len = horiz ? pw + 60 : ph + 60, seg = 150, gate = Math.floor(rnd() * Math.ceil(len / seg));
+                for (let k = 0, off = 0; off < len - 20; k++, off += seg + 8) {
+                    if (k === gate || rnd() < 0.25) continue;
+                    const sl = Math.min(seg, len - off);
+                    if (horiz) putWall(px - 30 + off, s === 0 ? py - 34 : py + ph + 20, sl, 14); else putWall(s === 2 ? px - 34 : px + pw + 20, py - 30 + off, 14, sl);
+                }
+            }
+            if (rnd() < 0.8) { const tx = rnd() < 0.5 ? px - 74 : px + pw + 20, ty = rnd() < 0.5 ? py - 74 : py + ph + 20; if (!hitB(tx - 30, ty - 30, tx + 84, ty + 84) && !nearRoad(tx + 27, ty + 27, 30)) buildings.push({ x: tx, y: ty, w: 54, h: 54, hk: 'tower', seed: seedOf(), v: Math.floor(rnd() * 3) }); }
+            break;
+        }
+    }
+
+    // 貨櫃場：成排的貨櫃堆，中間留出車道
+    const yardN = Math.max(1, Math.round(1.5 * k135));
+    for (let i = 0; i < yardN; i++) {
+        for (let attempt = 0; attempt < 80; attempt++) {
+            const yw = R(460, 760), yh = R(230, 330);
+            if (yw > XR - XL) continue;
+            const yx = R(XL, XR - yw), yy = R(HF_QUAY_H + 140, Math.max(HF_QUAY_H + 141, Math.min(YB - yh, HF_QUAY_H + 600 + 300 * mapScale)));
+            if (padNear(yx, yy, yx + yw, yy + yh, 100) || hitB(yx - 60, yy - 60, yx + yw + 60, yy + yh + 60)) continue;
+            const cellW = 180, cellH = 110, lane = 100;
+            for (let ry = yy; ry + cellH <= yy + yh; ry += cellH + lane) for (let rx = yx; rx + cellW <= yx + yw; rx += cellW + lane) {
+                if (rnd() < 0.15 || nearRoadRect(rx - 6, ry - 6, rx + cellW + 6, ry + cellH + 6, 16)) continue;   // 跳過會壓到道路的格子
+                const cols = 1 + Math.floor(rnd() * 2), rows = 1 + Math.floor(rnd() * 3), vert = rnd() < 0.2;
+                buildings.push({ x: rx, y: ry, w: vert ? rows * 38 - 4 : cols * 92 - 4, h: vert ? cols * 92 - 4 : rows * 38 - 4, hk: 'cont', cols, rows, vert, seed: seedOf() });
+            }
+            break;
+        }
+    }
+
+    // 倉庫、臥式油罐、廢墟：各自找空地
+    const placeBlock = (n, mk, margin) => {
+        for (let i = 0; i < n; i++) for (let t = 0; t < 120; t++) {
+            const o = mk(), x = R(XL, XR - o.w), y = R(YT, YB - o.h), m = Math.max(o.w, o.h) * 0.5 + margin;
+            if (inPad(x + o.w / 2, y + o.h / 2, m) || padNear(x, y, x + o.w, y + o.h, 60) || nearRoad(x + o.w / 2, y + o.h / 2, Math.max(o.w, o.h) * 0.5) || hitB(x - 90, y - 90, x + o.w + 90, y + o.h + 90)) continue;
+            buildings.push(Object.assign(o, { x, y })); break;
+        }
+    };
+    placeBlock(Math.round(10 * k135), () => { let w = R(150, 250), h = R(100, 170); if (rnd() < 0.35) { const t = w; w = h; h = t; } const dmg = rnd() < 0.25; return { w, h, hk: 'ware', seed: seedOf(), v: Math.floor(rnd() * 5), dmg, smolder: dmg }; }, 40);
+    placeBlock(Math.round(7 * k135), () => { const cols = 1 + Math.floor(rnd() * 2), rows = 1 + Math.floor(rnd() * 3), vert = rnd() < 0.3; return { w: vert ? rows * 38 - 4 : cols * 92 - 4, h: vert ? cols * 92 - 4 : rows * 38 - 4, hk: 'cont', cols, rows, vert, seed: seedOf() }; }, 30);
+    placeBlock(Math.round(6 * k135), () => { const sc = R(0.8, 1.1), vert = rnd() < 0.5, w = 200 * sc, h = 70 * sc; return { w: vert ? h : w, h: vert ? w : h, hk: 'hcyl', sc, vert, v: rnd() < 0.5 ? 0 : 1 }; }, 40);
+    placeBlock(Math.round(6 * k135), () => ({ w: R(130, 200), h: R(100, 160), hk: 'ruin', seed: seedOf(), smolder: rnd() < 0.4 }), 40);
+    // 單獨的斷牆
+    for (let i = 0; i < Math.round(9 * k15); i++) for (let t = 0; t < 30; t++) {
+        const horiz = rnd() < 0.5, len = R(110, 190), w = horiz ? len : 14, h = horiz ? 14 : len, x = R(XL, XR - w), y = R(YT, YB - h);
+        if (inPad(x + w / 2, y + h / 2, len / 2 + 40) || nearRoad(x + w / 2, y + h / 2, len / 2) || hitB(x - 50, y - 50, x + w + 50, y + h + 50)) continue;
+        buildings.push({ x, y, w, h, hk: 'wall', seed: seedOf(), brk: rnd() < 0.55 }); break;
+    }
+    // 枯樹與秋色的樹（樹幹有碰撞箱）
+    const groves = []; for (let i = 0; i < Math.max(3, Math.round(6 * k15)); i++) groves.push({ x: R(320, W - 320), y: R(YT + 60, H - 200) });
+    for (let i = 0; i < Math.round(38 * k15); i++) for (let n = 0; n < 40; n++) {
+        let x, y; if (rnd() < 0.7) { const gv = groves[Math.floor(rnd() * groves.length)], a = rnd() * 6.283, d = Math.pow(rnd(), 0.8) * 260; x = gv.x + Math.cos(a) * d; y = gv.y + Math.sin(a) * d; } else { x = R(330, W - 330); y = R(YT, H - 120); }
+        if (x < 330 || x > W - 330 || y < YT || y > H - 120) continue;
+        if (inPad(x, y, 70) || nearRoad(x, y, 46) || hitB(x - 50, y - 50, x + 50, y + 50)) continue;
+        buildings.push({ x: x - 15, y: y - 15, w: 30, h: 30, hk: 'tree', tk: rnd() < 0.45 ? 'dead' : 'autumn', tv: Math.floor(rnd() * 3), flip: rnd() < 0.5 }); break;
+    }
+
+    // 地面細節與小物件
+    const free = (x, y, m) => y > HF_QUAY_H + 24 && !(inPad(x, y, m) || nearRoad(x, y, m) || hitB(x - m, y - m, x + m, y + m));
+    const scatter = (n, make, m) => { let guard = 0; for (let i = 0; i < n && guard < n * 8; guard++) { const x = R(60, W - 60), y = R(HF_QUAY_H + 40, H - 60); if (!free(x, y, m)) continue; make(x, y); i++; } };
+    scatter(Math.round(120 * k15), (x, y) => hfProps.push({ type: 'bush', x, y, rot: rnd() * 6.283, sc: R(0.8, 1.4), v: Math.floor(rnd() * 4) }), 30);
+    scatter(Math.round(34 * k15), (x, y) => hfProps.push({ type: 'rock', x, y, rot: rnd() * 6.283, sc: R(0.7, 1.4), v: Math.floor(rnd() * 6) }), 26);
+    scatter(Math.round(10 * k15), (x, y) => hfProps.push({ type: 'pipes', x, y, rot: R(-0.4, 0.4) + (rnd() < 0.5 ? 0 : Math.PI / 2), sc: 1, v: 0 }), 44);
+    scatter(Math.round(14 * k15), (x, y) => hfProps.push({ type: 'tire', x, y, rot: rnd() * 6.283, sc: 1, v: 0 }), 22);
+    scatter(Math.round(26 * k15), (x, y) => hfFlat.push({ type: 'crater', x, y, r: R(28, 62), rot: rnd() * 6.283 }), 40);
+    scatter(Math.round(14 * k15), (x, y) => hfFlat.push({ type: 'scorch', x, y, r: R(44, 90), rot: rnd() * 6.283 }), 30);
+    scatter(Math.round(16 * k15), (x, y) => hfFlat.push({ type: 'puddle', x, y, rx: R(26, 60), ry: R(14, 32), rot: R(-0.5, 0.5) }), 30);
+    for (let i = 0; i < Math.round(16 * k15); i++) {   // 履帶與輪胎壓出的土痕
+        let x = R(300, W - 300), y = R(YT, H - 100), a = R(0, 6.283); const pts = [];
+        for (let t = 0; t < 12; t++) { pts.push({ x, y }); a += R(-0.18, 0.18); x += Math.cos(a) * 50; y += Math.sin(a) * 50; }
+        const xs = pts.map(q => q.x), ys = pts.map(q => q.y);
+        hfFlat.push({ type: 'track', pts, x0: Math.min(...xs) - 30, x1: Math.max(...xs) + 30, y0: Math.min(...ys) - 30, y1: Math.max(...ys) + 30 });
+    }
+    for (let i = 0; i < Math.round(80 * k15); i++) hfMacro.push({ x: R(0, W), y: R(HF_QUAY_H - 20, H), r: R(110, 260), a: R(0.18, 0.5), k: rnd() < 0.5 ? 'dark' : 'dust' });
+    // 倉庫、廢墟旁的木桶、木箱、棧板
+    for (const b of buildings.filter(q => q.hk === 'ware' || q.hk === 'ruin' || (q.hk === 'cont' && rnd() < 0.12))) {
+        const n = 1 + Math.floor(rnd() * 3);
+        for (let k = 0; k < n; k++) {
+            const s2 = Math.floor(rnd() * 4), t = R(0.12, 0.88), off = R(26, 46);
+            const x = s2 === 0 || s2 === 2 ? b.x + b.w * t : s2 === 1 ? b.x + b.w + off : b.x - off, y = s2 === 1 || s2 === 3 ? b.y + b.h * t : s2 === 0 ? b.y - off : b.y + b.h + off;
+            if (!free(x, y, 16)) continue;
+            const r = rnd();
+            hfProps.push(r < 0.5 ? { type: 'drum', x, y, rot: 0, v: Math.floor(rnd() * 6) } : r < 0.8 ? { type: 'crate', x, y, rot: R(-0.4, 0.4), v: Math.floor(rnd() * 3) } : { type: 'pallet', x, y, rot: R(-0.3, 0.3), v: 0 });
+            if (rnd() < 0.5) hfProps.push({ type: 'drum', x: x + R(-16, 16), y: y + R(-16, 16), rot: 0, v: Math.floor(rnd() * 6) });
+        }
+    }
+    // 電線桿（沿著柏油路南側）
+    for (const rd of hfRoads) {
+        if (rd.kind !== 'asphalt') continue;
+        let prev = null;
+        for (let i = 2; i < rd.pts.length - 2; i += 4) {
+            const q = rd.pts[i], x = q.x, y = q.y + rd.w / 2 + 34;
+            if (x < 60 || x > W - 60 || y < HF_QUAY_H + 20 || !free(x, y, 14)) { prev = null; continue; }
+            hfProps.push({ type: 'pole', x, y, rot: 0, sc: 1, v: 0 });
+            if (prev) hfWires.push({ x0: prev.x, y0: prev.y, x1: x, y1: y });
+            prev = { x, y };
+        }
+    }
+    // 帳篷營地：雙方出生區旁各幾處（純裝飾），以及零星野營（附沙包）
+    const camp = (cx, cy, withBags) => {
+        const n = 2 + Math.floor(rnd() * 2);
+        for (let i = 0; i < n; i++) hfProps.push({ type: 'tent', x: cx + R(-70, 70), y: cy + R(-60, 60), rot: R(-0.5, 0.5) + (rnd() < 0.5 ? 0 : Math.PI), sc: 1, v: Math.floor(rnd() * 3) });
+        for (let i = 0; i < 5; i++) { const x = cx + R(-90, 90), y = cy + R(-80, 80), r = rnd(); hfProps.push(r < 0.5 ? { type: 'drum', x, y, rot: 0, v: Math.floor(rnd() * 6) } : { type: 'crate', x, y, rot: R(-0.4, 0.4), v: Math.floor(rnd() * 3) }); }
+        if (withBags) for (let i = 0; i < 2; i++) { const sx = cx + R(-120, 120), sy = cy + R(-100, 100); if (free(sx, sy, 40)) createSandbag(sx, sy, R(0, 3.14), { neutral: true }); }
+    };
+    const sideN = 1 + Math.floor(mapScale * 0.8);
+    for (let i = 0; i < sideN; i++) { camp(R(70, 300), R(HF_QUAY_H + 120, H - 120), false); camp(R(W - 300, W - 70), R(HF_QUAY_H + 120, H - 120), false); }
+    scatter(Math.round(3 * k15), (x, y) => camp(x, y, true), 100);
+}
+
+// ───────── 繪製 ─────────
+function drawHFPad(p) {
+    ctx.fillStyle = 'rgba(52,40,28,0.55)'; hfRR(ctx, p.x - 18, p.y - 18, p.w + 36, p.h + 36, 24); ctx.fill();
+    ctx.fillStyle = getHFConcretePattern(); hfRR(ctx, p.x, p.y, p.w, p.h, 14); ctx.fill();
+    ctx.fillStyle = '#12100e';
+    for (const s of p.stains) { ctx.globalAlpha = s.a; ctx.beginPath(); ctx.ellipse(s.x, s.y, s.rx, s.ry, s.rot, 0, 6.283); ctx.fill(); }
+    ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(18,18,20,0.4)'; ctx.lineWidth = 1.6; ctx.lineJoin = 'round';
+    for (const c of p.cracks) { ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke(); }
+    ctx.strokeStyle = '#8d8b85'; ctx.lineWidth = 6; hfRR(ctx, p.x, p.y, p.w, p.h, 14); ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 2; hfRR(ctx, p.x + 4, p.y + 4, p.w - 8, p.h - 8, 11); ctx.stroke();
+}
+function hfPipe(x0, y0, x1, y1, w) {
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = 'rgba(0,0,0,0.30)'; ctx.lineWidth = w + 2; ctx.beginPath(); ctx.moveTo(x0 + 9, y0 + 12); ctx.lineTo(x1 + 9, y1 + 12); ctx.stroke();
+    ctx.strokeStyle = '#555a60'; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    const ox = y1 === y0 ? 0 : -w * 0.22, oy = y1 === y0 ? -w * 0.22 : 0;
+    ctx.strokeStyle = 'rgba(190,196,202,0.55)'; ctx.lineWidth = Math.max(1.5, w * 0.28); ctx.beginPath(); ctx.moveTo(x0 + ox, y0 + oy); ctx.lineTo(x1 + ox, y1 + oy); ctx.stroke();
+}
+function drawHFPipes(p) {
+    const y0 = p.rackY, xa = p.x - p.leadL, xb = p.x + p.w + p.leadR;
+    for (let x = xa + 30; x < xb; x += 96) {   // 磚褐色支墩
+        ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(x - 3, y0 - 3, 22, 28);
+        ctx.fillStyle = '#9a7c5e'; ctx.fillRect(x - 11, y0 - 14, 22, 28); ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(x - 11, y0 - 14, 22, 4);
+        ctx.strokeStyle = 'rgba(40,28,18,0.5)'; ctx.lineWidth = 1.5; ctx.strokeRect(x - 11, y0 - 14, 22, 28);
+    }
+    for (const t of p.tanks) hfPipe(t.cx, t.cy, t.cx, y0 + (t.cy < y0 ? -6 : 6), 7);
+    hfPipe(xa, y0 - 6, xb, y0 - 6, 8); hfPipe(xa, y0 + 6, xb, y0 + 6, 8);
+    ctx.fillStyle = '#4a4e53'; for (const t of p.tanks) { ctx.beginPath(); ctx.arc(t.cx, y0 + (t.cy < y0 ? -6 : 6), 6.5, 0, 6.283); ctx.fill(); }
+}
+function drawHFHarbor(vr) {
+    if (vr.y0 > HF_QUAY_H + 80) return;
+    const W = MAP_WIDTH, t = Date.now() * 0.001, x0 = Math.max(0, Math.floor(vr.x0 / 40) * 40), x1 = Math.min(W, vr.x1 + 40);
+    const wg = ctx.createLinearGradient(0, 0, 0, HF_WATER_H); wg.addColorStop(0, '#26414d'); wg.addColorStop(1, '#3c6672');
+    ctx.fillStyle = wg; ctx.fillRect(0, 0, W, HF_WATER_H);
+    ctx.strokeStyle = 'rgba(190,220,228,0.16)'; ctx.lineWidth = 1.6; ctx.beginPath();
+    for (let row = 0; row < 7; row++) { const y = 16 + row * 20; for (let x = x0; x < x1; x += 40) { const yy = y + Math.sin(t * 1.1 + x * 0.02 + row * 1.7) * 2.2; ctx.moveTo(x, yy); ctx.lineTo(x + 22 + Math.sin(x + row) * 6, yy + Math.sin(t + x * 0.05) * 0.8); } }
+    ctx.stroke();
+    for (const s of hfShips) {
+        if (s.x + 340 < vr.x0 || s.x - 340 > vr.x1) continue;
+        const sp = hfShipSprite(s.v); ctx.save(); ctx.translate(s.x, 74 + Math.sin(t * 0.8 + s.x) * 1.6); if (s.flip) ctx.scale(-1, 1); ctx.drawImage(sp, -sp.width / 2, -sp.height / 2); ctx.restore();
+    }
+    ctx.fillStyle = '#6e6b66'; ctx.fillRect(0, HF_WATER_H, W, HF_QUAY_H - HF_WATER_H);
+    ctx.fillStyle = '#7d7a74'; ctx.fillRect(0, HF_WATER_H, W, 7); ctx.fillStyle = 'rgba(15,15,15,0.5)'; ctx.fillRect(0, HF_WATER_H - 3, W, 4);
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = 1.5; ctx.beginPath();
+    for (let x = Math.floor(x0 / 120) * 120; x < x1; x += 120) { ctx.moveTo(x, HF_WATER_H + 7); ctx.lineTo(x, HF_QUAY_H); }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(214,184,52,0.75)'; ctx.fillRect(x0, HF_WATER_H + 20, x1 - x0, 3);
+    ctx.fillStyle = 'rgba(40,40,44,0.7)'; ctx.fillRect(x0, HF_WATER_H + 30, x1 - x0, 3); ctx.fillRect(x0, HF_WATER_H + 48, x1 - x0, 3);
+    for (let x = Math.floor(x0 / 70) * 70; x < x1; x += 70) { ctx.fillStyle = '#1e1e20'; ctx.fillRect(x, HF_WATER_H - 5, 22, 7); }
+    for (let x = Math.floor(x0 / 140) * 140 + 35; x < x1; x += 140) {
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(x + 2, HF_WATER_H + 14, 5.5, 0, 6.283); ctx.fill();
+        ctx.fillStyle = '#2b2b2e'; ctx.beginPath(); ctx.arc(x, HF_WATER_H + 12, 5.5, 0, 6.283); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.arc(x - 1.5, HF_WATER_H + 10.5, 2, 0, 6.283); ctx.fill();
+    }
+    const csp = hfCraneSprite();
+    for (const cx of hfCranes) { if (cx + 80 < vr.x0 || cx - 80 > vr.x1) continue; ctx.drawImage(csp, cx - csp.width / 2, 21); }
+    for (let x = Math.floor(x0 / 48) * 48; x < x1; x += 48) {   // 內側的混凝土護欄塊（也解釋了為什麼過不去）
+        ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x + 5, HF_QUAY_H - 14 + 7, 44, 14);
+        ctx.fillStyle = '#8e8b84'; ctx.fillRect(x, HF_QUAY_H - 14, 44, 14); ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.fillRect(x, HF_QUAY_H - 14, 44, 3);
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, HF_QUAY_H - 13.5, 43, 13);
+    }
+}
+function drawHFGround(vr) {
+    const W = MAP_WIDTH, H = MAP_HEIGHT;
+    ctx.fillStyle = '#7d6c4f'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = getHFGroundPattern(); ctx.fillRect(0, 0, W, H);
+    for (const m of hfMacro) {
+        if (m.x + m.r < vr.x0 || m.x - m.r > vr.x1 || m.y + m.r < vr.y0 || m.y - m.r > vr.y1) continue;
+        ctx.globalAlpha = m.a; ctx.drawImage(m.sp || (m.sp = hfSoft(m.k)), m.x - m.r, m.y - m.r, m.r * 2, m.r * 2);
+    }
+    ctx.globalAlpha = 1;
+    for (const d of hfFlat) {
+        if (d.type !== 'track' || d.x1 < vr.x0 || d.x0 > vr.x1 || d.y1 < vr.y0 || d.y0 > vr.y1) continue;
+        ctx.strokeStyle = 'rgba(46,34,22,0.20)'; ctx.lineWidth = 5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        for (const o of [-10, 10]) { const op = snowOffsetPath(d.pts, o); ctx.beginPath(); op.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke(); }
+    }
+    for (const rd of hfRoads) {   // 道路：外緣塵土 → 路面 → 中央磨損 → 標線（只畫視野附近的段落）
+        if (rd.horiz ? (rd.y1 < vr.y0 - 120 || rd.y0 > vr.y1 + 120) : (rd.x1 < vr.x0 - 120 || rd.x0 > vr.x1 + 120)) continue;
+        const lo = (rd.horiz ? vr.x0 : vr.y0) - 260, hi = (rd.horiz ? vr.x1 : vr.y1) + 260, pts = rd.pts.filter(q => { const v = rd.horiz ? q.x : q.y; return v >= lo && v <= hi; });
+        if (pts.length < 2) continue;
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        const trace = (pts, w, col) => { ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); pts.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke(); };
+        const asp = rd.kind === 'asphalt';
+        trace(pts, rd.w + 16, 'rgba(60,46,30,0.30)');
+        trace(pts, rd.w, asp ? '#4a4d52' : '#6a5c48');
+        trace(pts, rd.w * 0.55, asp ? 'rgba(0,0,0,0.14)' : 'rgba(40,30,20,0.14)');
+        if (asp) {
+            ctx.save(); ctx.setLineDash([26, 22]); trace(pts, 3, 'rgba(214,190,90,0.55)'); ctx.setLineDash([]); ctx.restore();
+            for (const o of [-0.43, 0.43]) trace(snowOffsetPath(pts, rd.w * o), 2, 'rgba(235,235,225,0.28)');
+        }
+    }
+    ctx.lineCap = 'butt';
+    for (const w of hfWires) { ctx.strokeStyle = 'rgba(0,0,0,0.14)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(w.x0 + 10, w.y0 + 13); ctx.lineTo(w.x1 + 10, w.y1 + 13); ctx.stroke(); }
+    for (const d of hfFlat) {
+        if (d.type === 'track') continue;
+        const r = d.r || Math.max(d.rx, d.ry);
+        if (d.x + r * 1.6 < vr.x0 || d.x - r * 1.6 > vr.x1 || d.y + r * 1.6 < vr.y0 || d.y - r * 1.6 > vr.y1) continue;
+        if (d.type === 'crater') {
+            ctx.globalAlpha = 0.55; ctx.drawImage(hfSoft('dust'), d.x - d.r * 1.5, d.y - d.r * 1.35, d.r * 3, d.r * 2.7);
+            ctx.globalAlpha = 0.9; ctx.drawImage(hfSoft('dark'), d.x - d.r, d.y - d.r * 0.9, d.r * 2, d.r * 1.8); ctx.globalAlpha = 1;
+        } else if (d.type === 'scorch') {
+            ctx.globalAlpha = 0.5; ctx.drawImage(hfSoft('oil'), d.x - d.r * 1.2, d.y - d.r * 1.1, d.r * 2.4, d.r * 2.2); ctx.globalAlpha = 1;
+        } else if (d.type === 'puddle') {
+            ctx.save(); ctx.translate(d.x, d.y); ctx.rotate(d.rot);
+            ctx.fillStyle = 'rgba(20,17,14,0.6)'; ctx.beginPath(); ctx.ellipse(0, 0, d.rx, d.ry, 0, 0, 6.283); ctx.fill();
+            ctx.strokeStyle = 'rgba(130,160,170,0.28)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(-d.rx * 0.1, -d.ry * 0.1, d.rx * 0.7, d.ry * 0.6, 0, 3.6, 5.2); ctx.stroke();
+            ctx.restore();
+        }
+    }
+    for (const p of hfPads) {
+        if (p.x - p.leadL - 40 > vr.x1 || p.x + p.w + p.leadR + 40 < vr.x0 || p.y - 40 > vr.y1 || p.y + p.h + 40 < vr.y0) continue;
+        drawHFPad(p); drawHFPipes(p);
+    }
+    drawHFHarbor(vr);
+}
+function drawHFBuilding(b) {
+    if (b.hk === 'quay') return;
+    const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    if (b.hk === 'tank') { const sp = hfTankSprite(b.tk, b.tv), sc = b.d / 200; ctx.drawImage(sp, cx - 140 * sc, cy - 140 * sc, 280 * sc, 280 * sc); return; }
+    if (b.hk === 'hcyl') { const sp = hfHCylSprite(b.v), sc = b.sc; ctx.save(); ctx.translate(cx, cy); if (b.vert) ctx.rotate(Math.PI / 2); ctx.drawImage(sp, -120 * sc, -58 * sc, 240 * sc, 120 * sc); ctx.restore(); return; }
+    if (b.hk === 'tree') { const sp = getHFTreeSprite(b.tk, b.tv); ctx.save(); ctx.translate(cx, cy); if (b.flip) ctx.scale(-1, 1); ctx.drawImage(sp, -sp.width / 2, -sp.height / 2); ctx.restore(); return; }
+    const sp = b.hk === 'ware' ? getHFWareSprite(b) : b.hk === 'cont' ? getHFContSprite(b) : b.hk === 'tower' ? getHFTowerSprite(b) : b.hk === 'wall' ? getHFWallSprite(b) : getHFRuinSprite(b);
+    ctx.drawImage(sp.canvas, b.x - sp.M, b.y - sp.M);
+    if (b.smolder && Math.random() < 0.06) smokeParticles.push({ x: b.x + b.w * (0.2 + Math.random() * 0.6), y: b.y + b.h * (0.2 + Math.random() * 0.6), vx: (Math.random() - 0.5) * 0.4, vy: -0.35 - Math.random() * 0.5, life: 70 + Math.random() * 50, maxLife: 120, size: 7 + Math.random() * 8, color: '#4a4440' });
+}
+function drawHFProps(vr) {
+    for (const d of hfProps) {
+        if (d.x < vr.x0 - 90 || d.x > vr.x1 + 90 || d.y < vr.y0 - 90 || d.y > vr.y1 + 90) continue;
+        const sp = d.sp || (d.sp = hfPropSprite(d.type, d.v || 0)), sc = d.sc || 1;
+        ctx.save(); ctx.translate(d.x, d.y); if (d.rot) ctx.rotate(d.rot); ctx.drawImage(sp, -sp.width / 2 * sc, -sp.height / 2 * sc, sp.width * sc, sp.height * sc); ctx.restore();
+    }
+}
+// ===================== 海港工廠 結束 =====================
+
 function generateTownBuildings() {
     buildings = []; cityDecals = []; citySpriteCache.clear(); plainsDecals = []; plainsRoads = []; plainsFields = []; sandbags = []; sandbagRubble = [];
     if (chosenMap === 'snow') { generateSnowMap(); return; }
+    if (chosenMap === 'harbor') { generateHarborMap(); return; }
     if (chosenMap !== 'city') { generatePlainsDecals(); return; }
     // 建築數量隨地圖面積增加（空間雜湊加速重疊檢查）
     const buildingCount = Math.round(40 * Math.pow(mapScale, 1.35));
@@ -3705,6 +4350,7 @@ const eliteMapCity = document.getElementById('eliteMapCity');
 let eliteStep = 1;
 
 function syncMapCards() {
+    document.getElementById('mapHarbor').classList.toggle('selected', chosenMap === 'harbor'); document.getElementById('eliteMapHarbor').classList.toggle('selected', chosenMap === 'harbor');
     mapPlains.classList.toggle('selected', chosenMap === 'plains'); mapCity.classList.toggle('selected', chosenMap === 'city');
     eliteMapPlains.classList.toggle('selected', chosenMap === 'plains'); eliteMapCity.classList.toggle('selected', chosenMap === 'city');
     document.getElementById('mapSnow').classList.toggle('selected', chosenMap === 'snow'); document.getElementById('eliteMapSnow').classList.toggle('selected', chosenMap === 'snow');
@@ -3740,6 +4386,7 @@ document.getElementById('sandboxBackBtn').addEventListener('click', showHome);
 eliteMapPlains.addEventListener('click', () => { chosenMap = 'plains'; syncMapCards(); });
 eliteMapCity.addEventListener('click', () => { chosenMap = 'city'; syncMapCards(); });
 document.getElementById('eliteMapSnow').addEventListener('click', () => { chosenMap = 'snow'; syncMapCards(); });
+document.getElementById('eliteMapHarbor').addEventListener('click', () => { chosenMap = 'harbor'; syncMapCards(); });
 eliteStartBtn.addEventListener('click', () => {
     if (eliteStep === 1) {
         eliteStepMap.style.display = 'none';
@@ -8004,6 +8651,8 @@ function draw() {
         ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
         ctx.fillStyle = getCityGroundPattern();
         ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+    } else if (chosenMap === 'harbor') {
+        drawHFGround(viewRect);   // 土地、道路、油槽地坪與管線、港口水域、貨輪、吊車
     } else if (chosenMap === 'snow') {
         drawSnowGround(viewRect);   // 雪地、小路、市集廣場、雪丘與冰面
     } else {
@@ -8053,6 +8702,8 @@ function draw() {
             ctx.drawImage(sp.canvas, b.x - sp.M, b.y - sp.M);
             // 冒煙的廢墟
             if (b.smolder && Math.random() < 0.06) smokeParticles.push({ x: b.x + b.w * (0.2 + Math.random() * 0.6), y: b.y + b.h * (0.2 + Math.random() * 0.6), vx: (Math.random() - 0.5) * 0.4, vy: -0.35 - Math.random() * 0.5, life: 70 + Math.random() * 50, maxLife: 120, size: 7 + Math.random() * 8, color: '#4a4440' });
+        } else if (chosenMap === 'harbor') {
+            drawHFBuilding(b);
         } else if (chosenMap === 'snow') {
             drawSnowBuilding(b);
         } else {
@@ -8061,6 +8712,7 @@ function draw() {
             ctx.fillStyle = '#41464b'; ctx.fillRect(b.x + 10, b.y + 10, b.w - 20, b.h - 20); ctx.strokeRect(b.x + 10, b.y + 10, b.w - 20, b.h - 20);
         }
     });
+    if (chosenMap === 'harbor') drawHFProps(viewRect);   // 木桶、木箱、帳篷、灌木、電線桿
     if (chosenMap === 'snow') drawSnowProps(viewRect);   // 攤位、貨物、灌木、路燈、火桶
     drawSandbags(viewRect);   // 沙包與沙包殘骸
 
