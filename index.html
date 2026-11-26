@@ -1,12 +1,10 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-<head>
-    <meta property="og:title" content="裝甲終焉" />
+<head>    <meta property="og:title" content="裝甲終焉" />
 <meta property="og:description" content="扎扎師開發的遊戲" />
 <meta property="og:image" content="https://liangzhenglai940-dot.github.io/Tank-game-2/IMG_4833.jpeg" />
 <meta name="twitter:card" content="summary_large_image" />
-<link rel="apple-touch-icon" href="IMG_4833.jpeg">
-
+<link rel="apple-touch-icon" href="IMG_4833.jpeg
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>裝甲終焉</title>
@@ -1008,6 +1006,17 @@
 #cpEnd .cpe-btn { pointer-events: auto; opacity: 0; transition: opacity 1s ease; font-size: clamp(15px, 3.2vh, 22px); padding: 1.4vh 2.4vw; }
 #cpEnd.show .cpe-text, #cpEnd.show2 .cpe-btn { opacity: 1; }
 #skillBtn.cp-locked { background-color: #5b5b5b !important; border-color: #3d3d3d !important; box-shadow: 0 6px #262626, 0 10px 15px rgba(0,0,0,0.5) !important; color: #b8b8b8; font-size: 15px; }
+
+#cpNarr { position: fixed; left: 50%; bottom: 7vh; transform: translateX(-50%); z-index: 47; width: min(90vw, 860px); text-align: center; pointer-events: none; opacity: 0; transition: opacity .5s ease;
+    padding: 1.4vh 2vw; font-size: clamp(15px, 3.4vh, 24px); line-height: 1.7; letter-spacing: 3px; font-style: italic; color: #e9dfbf;
+    background: linear-gradient(180deg, rgba(10,12,8,0.78), rgba(10,12,8,0.78)); border-top: 1px solid rgba(201,168,90,0.6); border-bottom: 1px solid rgba(201,168,90,0.6); text-shadow: 0 2px 4px #000; }
+#cpNarr.show { opacity: 1; }
+#cpDialog.auto .cpd-hint { display: none; }
+#cpDefeat { position: fixed; inset: 0; z-index: 60; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 5vh; background: rgba(0,0,0,0.78); }
+#cpDefeat .cpf-title { font-size: clamp(30px, 8vh, 60px); font-weight: bold; letter-spacing: 12px; color: #c0392b; text-shadow: 0 2px 0 #000; }
+#cpDefeat .cpf-btns { display: flex; gap: 3vw; } #cpDefeat .cpf-btns .lb-btn { font-size: clamp(15px, 3.2vh, 22px); padding: 1.6vh 2.6vw; }
+#cpChapterSelect .cp-row { gap: 3vw; }
+#cpChapterSelect .cp-chap { width: min(21vw, 190px); }
     </style>
 </head>
 <body>
@@ -1415,7 +1424,8 @@
         <div class="cp-title">選擇章節</div>
         <div class="cp-row">
             <button type="button" class="cp-btn cp-chap" id="cpChap1"><span class="cp-vt"><span class="cp-vno">第一章：</span>新的鋼鐵伙伴</span></button>
-            <button type="button" class="cp-btn cp-chap soon" id="cpChap2"><span class="cp-vt">敬請期待：</span></button>
+            <button type="button" class="cp-btn cp-chap" id="cpChap2"><span class="cp-vt"><span class="cp-vno">第二章：</span>雪地中的引擎</span></button>
+            <button type="button" class="cp-btn cp-chap soon" id="cpChap3"><span class="cp-vt">敬請期待：</span></button>
         </div>
     </div>
     <div id="cpStory">
@@ -1436,6 +1446,8 @@
     <div id="cpTap"></div>
     <div id="cpCard"></div>
     <div id="cpDialog"><div class="cpd-name"></div><div class="cpd-text"></div><div class="cpd-hint">▼ 點擊繼續</div></div>
+    <div id="cpNarr"></div>
+    <div id="cpDefeat"><div class="cpf-title">任務失敗</div><div class="cpf-btns"><button type="button" class="lb-btn lb-primary" id="cpRetry"><span>重試戰鬥</span></button><button type="button" class="lb-btn" id="cpDefMenu"><span>返回主選單</span></button></div></div>
     <div id="cpFade"></div>
     <div id="cpEnd"><div class="cpe-text">章節結束…</div><button type="button" class="lb-btn cpe-btn" id="cpEndBtn"><span>返回章節選擇</span></button></div>
 
@@ -6105,6 +6117,7 @@ function updateAiTank(e, targetList, bulletList) {
     if (!bestTarget && aliveTargets.length) {
         const score = t => {
             const d=Math.hypot(t.x-e.x,t.y-e.y);
+            if (e.cpNearest) return -d - (t.isInfantry ? 40 : 0);   // 戰役：敵人優先打最近的目標，不只鎖重坦
             const hpRatio=t.hp/Math.max(1,t.maxHp||t.hp);
             let value=(t.damage||0)*.55+(t.pen||0)*.18+(1-hpRatio)*35-d*.035;
             if (t.isInfantry) value-=35;
@@ -12243,8 +12256,9 @@ $('cpTankBack').addEventListener('click', showCpMenu);
 $('cpTankIS2').addEventListener('click', showChapterSelect);
 ['cpTankSU85', 'cpTankBT5', 'cpTankT34'].forEach(id => $(id).addEventListener('click', () => toast('此劇本 敬請期待')));
 $('cpChapBack').addEventListener('click', showTankSelect);
-$('cpChap2').addEventListener('click', () => toast('更多章節 敬請期待'));
-$('cpChap1').addEventListener('click', startChapter1);
+$('cpChap2').addEventListener('click', () => startChapter(2));
+$('cpChap3').addEventListener('click', () => toast('更多章節 敬請期待'));
+$('cpChap1').addEventListener('click', () => startChapter(1));
 document.querySelectorAll('.cp-cpic[data-tank]').forEach(el => {
     try { el.appendChild(makeTankIconCanvas(el.dataset.tank, 150, 100)); }
     catch (e) { el.innerHTML = '<span class="cp-ph">(坦克圖片)</span>'; }
@@ -12252,8 +12266,13 @@ document.querySelectorAll('.cp-cpic[data-tank]').forEach(el => {
 
 // ================================================================ 背景故事（由下往上）
 let storyDone = false;
-function startChapter1() {
+const STORY = {
+    1: $('cpStoryText').innerHTML,
+    2: '<div class="cps-h">第二章<br>雪地中的引擎</div><div class="cps-meta">地點：蘇聯近衛重型坦克團・臨時駐地</div><p>清晨，雪花不斷落在坦克營地。</p><p>玩家的 IS-2 停放在維修棚旁，<br>車組正在進行出發前的檢查。</p><p>此時，一名蘇聯軍官走向玩家。</p>'
+};
+function startChapter(ch) {
     cleanup(true);
+    CP.ch = ch; $('cpStoryText').innerHTML = STORY[ch];
     CP.active = true; CP.step = 'story'; storyDone = false;
     unlockAudio();
     hideAllMenus();
@@ -12324,8 +12343,9 @@ function cardShow(prof, cb) {
     showTap(true, () => { el.style.display = 'none'; showTap(false); cb(); });
 }
 function hideAllCpUi() {
-    ['cpBig', 'cpPrompt'].forEach(id => $(id).classList.remove('show'));
-    ['cpTap', 'cpMove', 'cpCard', 'cpDialog', 'cpStory', 'cpEnd', 'cpFade'].forEach(id => { $(id).style.display = 'none'; });
+    ['cpBig', 'cpPrompt', 'cpNarr'].forEach(id => $(id).classList.remove('show'));
+    $('cpDialog').classList.remove('auto');
+    ['cpTap', 'cpMove', 'cpCard', 'cpDialog', 'cpStory', 'cpEnd', 'cpFade', 'cpDefeat'].forEach(id => { $(id).style.display = 'none'; });
     $('cpEnd').classList.remove('show', 'show2'); $('cpFade').style.opacity = 0;
     CP.tapFn = null;
 }
@@ -12365,6 +12385,7 @@ function setupWorld() {
     // ---- 地面：沿用「霜雪市集」的雪地，再換成自己的路與佈景
     buildings = []; generateSnowMap();
     buildings = []; snowPlazas = []; snowDecals = [];
+    if (CP.ch === 2) buildWorld2(); else {
     snowRoads = [{ w: 92, pts: [{ x: -100, y: 1500 }, { x: 500, y: 1500 }, { x: 1000, y: 1500 }, { x: 1700, y: 1500 }, { x: 2300, y: 1500 }, { x: 2300, y: 1000 }, { x: 2300, y: 500 }, { x: 2300, y: -100 }] }];
     sandbags = []; sandbagRubble = [];
     const B = (x, y, w, h, kind, extra) => { const o = Object.assign({ x, y, w, h, cpKind: kind }, extra || {}); buildings.push(o); return o; };
@@ -12399,6 +12420,7 @@ function setupWorld() {
     prop('logs', 470, 1590, 0, 0.3); prop('sack', 600, 1560, 0, 0.4); prop('cart', 250, 1500, 0, 0.5); prop('lamp', 700, 1440); prop('lamp', 700, 1560);
     prop('lamp', YARD.x0 + 40, 1370); prop('lamp', YARD.x0 + 40, 1630); prop('crate', 1120, 1260, 1, 0.1); prop('barrel', 1180, 1270, 0); prop('barrel', 1800, 1760, 1); prop('crate', 1760, 1770, 2, 0.2);
 
+    }
     // ---- 重置戰場資料
     allies = []; enemies = []; allyBullets = []; enemyBullets = []; rockets = []; guidedMissiles = []; sparks = [];
     bouncingShells = []; hitEffects = []; muzzleFlashes = []; smokeParticles = []; trackMarks = []; shermanSmokes = []; repairFx = []; infantrySquads = []; impactFx = [];
@@ -12406,10 +12428,12 @@ function setupWorld() {
 
     // ---- IS-2（停在訓練場）
     tank.type = 'IS2'; initPlayerTankState();
-    tank.x = TANK_POS.x; tank.y = TANK_POS.y; tank.bodyAngle = 0; tank.turretAngle = 0; tank.isDead = false; tank.speed = 0; tank.recoilAt = 0;
+    if (CP.ch === 2) { tank.x = TANK2.x; tank.y = TANK2.y; tank.bodyAngle = tank.turretAngle = -Math.PI / 2; } else { tank.x = TANK_POS.x; tank.y = TANK_POS.y; tank.bodyAngle = 0; tank.turretAngle = 0; }
+    tank.isDead = false; tank.speed = 0; tank.recoilAt = 0;
     tank.hp = tank.maxHp;
 
     // ---- 人物
+    if (CP.ch === 2) makePeople2(); else {
     CP.hero = mkPerson({ role: 'hero', x: SPAWN.x, y: SPAWN.y, style: STYLE.hero });
     CP.crew = [
         mkPerson({ role: 'driver', key: 'driver', x: 1240, y: 1360, ang: 0.6, label: '伊凡', style: STYLE.driver, done: false }),
@@ -12418,8 +12442,11 @@ function setupWorld() {
     ];
     CP.inst = mkPerson({ role: 'inst', x: 1770, y: 1650, ang: 3.4, label: '教官', style: STYLE.inst });
     CP.people = [CP.hero, ...CP.crew, CP.inst];
-    CP.cannons = CANNONS.map((c, i) => Object.assign({ next: Date.now() + 800 + i * 330, period: rnd(1900, 2500), fireAt: 0 }, c));
+    }
+    CP.cannons = CP.ch !== 1 ? [] : CANNONS.map((c, i) => Object.assign({ next: Date.now() + 800 + i * 330, period: rnd(1900, 2500), fireAt: 0 }, c));
     CP.skillLocked = true; CP.zoomMul = 1; CP.zoomTarget = 1; CP.camFocus = null; CP.boarding = null; CP.hatchOpen = {}; CP.objective = null; CP.endT = 0; CP.shootDoneT = 0; CP.laneMid = false;
+    CP.invuln = true; CP.skillInfinite = (CP.ch === 1); CP.night = false; CP.battle = false; CP.reveal = false; CP.crewGoTank = false; CP.unboard = null; CP.win = false;
+    CP.truckDone = false; CP.scoutDone = false; CP.midDone = false; CP.enemiesSpawned = false; CP.defeatShown = false; CP.lights = [];
     CP.heroZoom = baseCameraScale(330);
     CP.zoomWant = CP.heroZoom;
     spectatorCamera.x = 1500; spectatorCamera.y = 1500; spectatorCamera.zoom = 0.2;
@@ -12435,22 +12462,27 @@ function setStep(step) {
     CP.step = step;
     const P = {
         toYard: '進入坦克訓練場。', talk: '與其他車組人員交流。', toTank: '上車，然後熟悉坦克操作', toRange: '開到靶場',
-        shoot: '打掉標靶', toSkill: '前往技能訓練場', useSkill: '請開啟技能，並穿過火力點'
+        shoot: '打掉標靶', toSkill: '前往技能訓練場', useSkill: '請開啟技能，並穿過火力點',
+        toCrew: '回到坦克旁邊，與成員交流', follow: '跟隨兩輛 T-34-85 前往北方森林', road: '穿越積雪道路', arrive: '抵達指定偵察區域',
+        search: '搜尋失聯偵察小隊的蹤跡', toTank2: '返回坦克，準備撤離', battle: '擊毀敵方坦克'
     };
     CP.objective = ({
         toYard: { x: YARD.x0, y: 1500 }, toTank: { x: TANK_POS.x, y: TANK_POS.y }, toRange: { x: 2330, y: 1500 },
-        toSkill: { x: 2300, y: 1090 }, useSkill: { x: 2300, y: 160 }
+        toSkill: { x: 2300, y: 1090 }, useSkill: { x: 2300, y: 160 },
+        toCrew: { x: TANK2.x, y: TANK2.y }, toTank2: { x: tank.x, y: tank.y }
     })[step] || null;
     setPrompt(P[step] || '');
+    if (CP.ch === 2) onStep2(step);
 }
 
 function startIntro() {
-    CP.step = 'intro'; CP.busy = true; CP.canMove = false; CP.introT = 0;
-    $('cpBig').textContent = '1944年12月，一支近衛重型坦克團接收新型\u00a0IS-2。';
+    CP.step = 'intro'; CP.busy = true; CP.canMove = false; CP.introT = 0; CP.introMs = CP.ch === 2 ? 5600 : INTRO_MS;
+    $('cpBig').textContent = CP.ch === 2 ? '第二章：雪地中的引擎' : '1944年12月，一支近衛重型坦克團接收新型\u00a0IS-2。';
     later(() => $('cpBig').classList.add('show'), 700);
-    later(() => $('cpBig').classList.remove('show'), INTRO_MS - 700);
+    later(() => $('cpBig').classList.remove('show'), CP.introMs - 700);
 }
 function finishIntro() {
+    if (CP.ch === 2) return finishIntro2();
     CP.busy = false; CP.canMove = true;
     leftContainer.style.visibility = 'visible'; initFixedJoystickPositions();
     $('cpMove').style.display = 'block';
@@ -12527,7 +12559,7 @@ function updateBoarding(dt) {
     }
 }
 
-function enterTankMode() {
+function enterTankMode(next) {
     isSpectatorMode = false; tank.isDead = false; tank.hp = tank.maxHp; tank.speed = 0;
     currentCameraScale = spectatorCamera.zoom; CP.zoomMul = 1; CP.zoomTarget = 1; CP.camFocus = null;
     CP.busy = false; CP.canMove = false;
@@ -12536,7 +12568,8 @@ function enterTankMode() {
     skillBtn.classList.add('cp-locked'); skillBtn.innerText = '🔒';
     gameUi.style.display = 'none';   // 不顯示血量與其他數值
     syncSettingsBtn(); initFixedJoystickPositions();
-    setStep('toRange');
+    CP.crewGoTank = false;
+    setStep(typeof next === 'string' ? next : 'toRange');
 }
 
 function spawnTargets() {
@@ -12577,7 +12610,7 @@ $('cpEndBtn').addEventListener('click', () => { backToMenuAction(); cleanup(fals
 // ================================================================ 每幀邏輯
 function collideCircle(p, r) {
     for (const b of buildings) {
-        if (b.cpKind === 'tent' || b.cpKind === 'fence' || b.cpKind === 'wall' || b.cpKind === 'air' || b.isTree || b.isHouse) {
+        if (b.cpKind || b.isTree || b.isHouse) {
             const cx = clamp(p.x, b.x, b.x + b.w), cy = clamp(p.y, b.y, b.y + b.h), dx = p.x - cx, dy = p.y - cy, d = Math.hypot(dx, dy);
             if (d < r) { if (d === 0) { p.x -= r; } else { const o = r - d; p.x += dx / d * o; p.y += dy / d * o; } }
         }
@@ -12603,7 +12636,7 @@ function preFrame() {
         const h = CP.hero;
         if (CP.step === 'intro') {
             CP.introT += dt;
-            const p = clamp(CP.introT / INTRO_MS, 0, 1), e = easeIO(p), z0 = 0.2, z1 = CP.heroZoom;
+            const p = clamp(CP.introT / CP.introMs, 0, 1), e = easeIO(p), z0 = 0.2, z1 = CP.heroZoom;
             spectatorCamera.x = 1500 + (h.x - 1500) * e; spectatorCamera.y = 1500 + (h.y - 1500) * e;
             spectatorCamera.zoom = z0 * Math.pow(z1 / z0, e);
             if (p >= 1) finishIntro();
@@ -12621,12 +12654,12 @@ function preFrame() {
                 h.x += Math.cos(a) * sp; h.y += Math.sin(a) * sp; h.ang = turnTo(h.ang, a, 0.28); h.walk += sp * 0.4; h.moving = true;
             }
             collideCircle(h, 13); collideTank(h, 13);
-            for (const c of CP.crew.concat([CP.inst])) { const dx = h.x - c.x, dy = h.y - c.y, d = Math.hypot(dx, dy); if (d < 26 && d > 0) { h.x = c.x + dx / d * 26; h.y = c.y + dy / d * 26; } }
+            for (const c of CP.crew.concat([CP.inst])) { if (c.hidden) continue; const dx = h.x - c.x, dy = h.y - c.y, d = Math.hypot(dx, dy); if (d < 26 && d > 0) { h.x = c.x + dx / d * 26; h.y = c.y + dy / d * 26; } }
         }
         // 其他人物
         for (const c of CP.crew) {
             c.moving = false;
-            if (CP.step === 'toTank' && !CP.boarding) {   // 走到坦克旁邊等車長
+            if ((CP.step === 'toTank' || CP.crewGoTank) && !CP.boarding) {   // 走到坦克旁邊等車長
                 const g = CP.boardSpot(c); const dx = g.x - c.x, dy = g.y - c.y, d = Math.hypot(dx, dy);
                 if (d > 3) { const sp = 2.2 * dS; c.x += dx / d * Math.min(sp, d); c.y += dy / d * Math.min(sp, d); c.ang = turnTo(c.ang, Math.atan2(dy, dx), 0.25); c.walk += sp * 0.4; c.moving = true; collideCircle(c, 12); }
                 else c.ang = turnTo(c.ang, Math.atan2(tank.y - c.y, tank.x - c.x), 0.1);
@@ -12635,10 +12668,11 @@ function preFrame() {
                 if (Math.hypot(dx, dy) < 320 && !c.fixedAng) c.ang = turnTo(c.ang, Math.atan2(dy, dx), 0.05);
             }
         }
-        if (!CP.boarding && Math.hypot(h.x - CP.inst.x, h.y - CP.inst.y) < 300 && CP.step !== 'instructor') CP.inst.ang = turnTo(CP.inst.ang, Math.atan2(h.y - CP.inst.y, h.x - CP.inst.x), 0.04);
+        if (CP.ch === 2) updateFollowers(dS);
+        if (!CP.boarding && CP.step !== 'officerWalk' && Math.hypot(h.x - CP.inst.x, h.y - CP.inst.y) < 300 && CP.step !== 'instructor') CP.inst.ang = turnTo(CP.inst.ang, Math.atan2(h.y - CP.inst.y, h.x - CP.inst.x), 0.04);
 
         // 各步驟的觸發條件
-        if (!CP.busy) {
+        if (!CP.busy && CP.ch === 1) {
             if (CP.step === 'toYard' && inRect(h, { x0: YARD.x0 + 70, y0: YARD.y0, x1: YARD.x1, y1: YARD.y1 })) setStep('talk');
             else if (CP.step === 'talk') {
                 const c = CP.crew.find(m => !m.done && Math.hypot(m.x - h.x, m.y - h.y) < 112);
@@ -12655,6 +12689,7 @@ function preFrame() {
         }
         updateBoarding(dt);
     }
+    if (CP.ch === 2) pre2(dt, dS, now);
     updateCannons(now);
 }
 CP.boardSpot = function (c) {
@@ -12678,11 +12713,12 @@ function updateCannons(now) {
 function postFrame() {
     // 目標標靶固定不動
     for (const e of enemies) if (e.cpDummy) { e.x = e.homeX; e.y = e.homeY; e.speed = 0; }
+    if (CP.ch === 2) post2();
     if (isSpectatorMode) return;
-    tank.hp = tank.maxHp;   // 訓練：車體不會被毀
-    if (tank.skillState === 'active') { tank.skillDuration = 1e9; tank.skillTimeLeft = 1e9; }
-    if (!CP.skillLocked) { uiSkillText.innerText = tank.skillState === 'active' ? '持續中 (∞)' : '準備就緒'; uiSkillBar.style.width = '100%'; uiSkillBar.style.backgroundColor = tank.skillState === 'active' ? '#3498db' : '#2ecc71'; }
-    if (CP.busy) return;
+    if (CP.invuln) tank.hp = tank.maxHp;   // 訓練：車體不會被毀
+    if (CP.skillInfinite && tank.skillState === 'active') { tank.skillDuration = 1e9; tank.skillTimeLeft = 1e9; }
+    if (CP.skillInfinite && !CP.skillLocked) { uiSkillText.innerText = tank.skillState === 'active' ? '持續中 (∞)' : '準備就緒'; uiSkillBar.style.width = '100%'; uiSkillBar.style.backgroundColor = tank.skillState === 'active' ? '#3498db' : '#2ecc71'; }
+    if (CP.ch === 2 || CP.busy) return;
     const now = Date.now();
     if (CP.step === 'toRange' && inRect(tank, RANGE)) { spawnTargets(); setStep('shoot'); }
     else if (CP.step === 'shoot') {
@@ -12718,6 +12754,7 @@ function drawPerson(p, t) {
     c.fillStyle = st.coat; c.beginPath(); c.ellipse(-0.5, 0, 7.4, 11.6, 0, 0, 6.283); c.fill();
     c.strokeStyle = st.coat2; c.lineWidth = 1.2; c.stroke();
     c.strokeStyle = 'rgba(0,0,0,0.35)'; c.lineWidth = 1.6; c.beginPath(); c.moveTo(1.6, -9.6); c.lineTo(1.6, 9.6); c.stroke();   // 腰帶
+    if (p.wounded) { c.fillStyle = '#ececec'; c.fillRect(-4, -10, 7, 6); c.fillStyle = '#c0392b'; c.fillRect(-2, -9, 2.5, 4); c.fillRect(-3.2, -8, 5, 2); }
     if (st.boards) { c.fillStyle = st.trim; c.fillRect(-1.5, -11.4, 4.2, 3.2); c.fillRect(-1.5, 8.2, 4.2, 3.2); }
     // 頭部與帽子
     if (st.ushanka) {
@@ -12789,6 +12826,7 @@ function drawAir(b) {
 }
 function drawStructure(b) {
     if (b.cpKind === 'tent') drawTent(b); else if (b.cpKind === 'fence') drawFence(b); else if (b.cpKind === 'wall') drawWall(b); else if (b.cpKind === 'air') drawAir(b);
+    else if (b.cpKind === 'truck') drawTruck(b); else if (b.cpKind === 'ruinwall') drawRuinWall(b); else if (b.cpKind === 'shedwall') drawShedWall(b);
 }
 function drawSign(x, y, w, text, sub) {
     const c = ctx; c.save();
@@ -12813,6 +12851,7 @@ function drawCannon(cn, now) {
     c.restore();
 }
 function drawDecor(vr) {
+    if (CP.ch === 2) return drawDecor2(vr);
     const c = ctx, now = Date.now(), t = now / 1000;
     // 訓練場地面：踩實的雪泥 + 停車格
     c.save();
@@ -12862,11 +12901,13 @@ function drawTop() {
         const list = CP.people.slice().sort((a, b) => a.y - b.y);
         for (const p of list) drawPerson(p, now);
         if (!CP.boarding) {
-            if (CP.step === 'talk') for (const m of CP.crew) if (!m.done) drawBang(m, now);
-            const lbl = (CP.step === 'talk' || CP.step === 'toTank' || CP.step === 'instructor');
-            if (lbl) { for (const m of CP.crew) drawLabel(m, m.label, COL[m.role === 'driver' ? 'ivan' : m.role === 'gunner' ? 'nikolai' : 'alexei']); drawLabel(CP.inst, '教官', COL.inst); }
+            if (CP.step === 'talk' || CP.step === 'toCrew') for (const m of CP.crew) if (!m.done) drawBang(m, now);
+            const lbl = (CP.step === 'talk' || CP.step === 'toTank' || CP.step === 'instructor' || CP.step === 'toCrew' || CP.step === 'officerWalk' || CP.step === 'officerTalk');
+            if (lbl) { for (const m of CP.crew) drawLabel(m, m.label, COL[m.role === 'driver' ? 'ivan' : m.role === 'gunner' ? 'nikolai' : 'alexei']); drawLabel(CP.inst, CP.inst.label || '教官', COL.inst); }
         }
     }
+    if (!isSpectatorMode && CP.ch === 2 && CP.t34 && (CP.step === 'follow' || CP.step === 'road' || CP.step === 'arrive')) for (const t of CP.t34) if (t.hp > 0 && Math.hypot(t.x - tank.x, t.y - tank.y) > 300) renderSpecificTank(t, false, true);
+    if (CP.reveal) for (const e of enemies) if (e.hp > 0) { renderSpecificTank(e, true, false); try { drawMarkerAt(e); } catch (_) {} }
     // 指向目標的小箭頭
     const o = CP.objective, ref = isSpectatorMode ? CP.hero : tank;
     if (o && !CP.busy && ref) {
@@ -12879,6 +12920,482 @@ function drawTop() {
     }
 }
 
+// ================================================================ 第二章：雪地中的引擎
+const R2 = [{ x: 1330, y: 2430 }, { x: 1420, y: 2150 }, { x: 1500, y: 1800 }, { x: 1450, y: 1450 }, { x: 1560, y: 1150 }, { x: 1760, y: 900 }, { x: 1900, y: 720 }];
+const T34_FIN = [{ x: 1790, y: 640 }, { x: 2010, y: 700 }];
+const ARR = { x: 1900, y: 760 };
+const TANK2 = { x: 1000, y: 2560 };
+const SHED = { x0: 1200, y0: 2500, x1: 1560, y1: 2720 };
+const TRUCK = { x: 2150, y: 430, w: 150, h: 74 };
+const RUIN = { x: 2540, y: 250, w: 250, h: 180 };
+const ENEMY_SP = [{ x: 1000, y: 300 }, { x: 1250, y: 150 }, { x: 950, y: 560 }];   // 離抵達點約 900~1000，遠遠就能看到
+const LIGHTS2 = [{ x: 760, y: 2480, r: 250 }, { x: 760, y: 2600, r: 250 }, { x: 1210, y: 2510, r: 230 }, { x: 1550, y: 2510, r: 230 }, { x: 1000, y: 2400, r: 170 }];
+SPEAKER_COL['軍官'] = COL.inst; SPEAKER_COL['偵察兵'] = '#cfe8ff';
+STYLE.scout = { coat: '#5c614b', coat2: '#41452f', cap: '#5a4a38', trim: '#c0392b', ushanka: true };
+const T2 = {
+    officer: [L('軍官', '車長，過來一下。'), L('主角', '長官，有什麼任務嗎？'), L('軍官', '我們收到前線的消息，一支偵察小隊在北方失去了聯絡。'), L('主角', '需要我們去尋找他們？'),
+              L('軍官', '沒錯。你們將與兩輛 T-34-85 一同前往，確認當地情況。如果發現敵軍，不要貿然深入，優先確保小隊安全。'), L('主角', '明白，長官。')],
+    crew: [L('伊凡', '車長！我們真的要去前線了嗎？'), L('主角', '沒錯，準備好了嗎？'), L('伊凡', '當然！只是……我還沒習慣這麼冷的天氣。'), L('阿列克謝', '哈哈！等你待在坦克裡一整天，就會開始懷念外面的雪了。'),
+           L('尼古拉', '別聊天了，檢查主砲。'), L('阿列克謝', '知道了，尼古拉。你真的一點幽默感都沒有。'), L('主角', '好了，大家上車，準備出發。')],
+    mid: [L('伊凡', '這條路真難走，積雪都快淹過履帶了。'), L('阿列克謝', '至少比待在維修棚裡好多了。'), L('尼古拉', '前面有東西。'), L('主角', '什麼東西？'),
+          L('尼古拉', '像是履帶印記，而且看起來不像我們的。'), L('主角', '提高警戒，繼續前進。')],
+    truck: [L('伊凡', '這裡好安靜……'), L('尼古拉', '車長，右側有煙。'), L('主角', '所有人保持警戒，慢慢靠近。')],
+    scout: [L('偵察兵', '你們是坦克部隊的？太好了！'), L('主角', '其他人呢？'), L('偵察兵', '我們遭到了德軍襲擊，其他人撤往西側的村莊了。我們被迫留在這裡。'), L('主角', '明白，我們會帶你們離開。')],
+    ambush: [L('尼古拉', '車長！前方發現敵方坦克！'), L('伊凡', '什麼？他們怎麼會在這裡？'), L('主角', '保持隊形，不要慌張！'), L('阿列克謝', '看來我們的第一次出差不會太輕鬆啊……')],
+    final: [L('伊凡', '呼……我還以為今天回不來了。'), L('阿列克謝', '別這麼說，我們不是好好的嗎？'), L('尼古拉', '至少我們完成了任務。'), L('主角', '大家今天做得很好，先好好休息吧。'),
+            L('阿列克謝', '車長，我有個問題。'), L('主角', '什麼？'), L('阿列克謝', '下一次任務……能不能讓我們去個暖和一點的地方？'), L('伊凡', '哈哈，我也這麼希望！')]
+};
+
+// ---------------------------------------------------------------- 旁白 / 自動對話
+function narrate(text, ms, cb) {
+    const el = $('cpNarr'); el.textContent = text; el.classList.add('show');
+    later(() => { el.classList.remove('show'); if (cb) later(cb, 450); }, ms);
+}
+function narrateSeq(list, cb, ms) { if (!list.length) { if (cb) cb(); return; } narrate(list[0], ms || 3200, () => narrateSeq(list.slice(1), cb, ms)); }
+function autoDlg(lines, per, cb) {
+    const box = $('cpDialog'); box.classList.add('auto'); box.style.display = 'block'; D.lines = lines; D.i = 0; D.cb = null; dlgLine();
+    const next = () => {
+        D.i++;
+        if (D.i >= lines.length) { box.style.display = 'none'; box.classList.remove('auto'); if (cb) cb(); return; }
+        dlgLine(); later(next, per);
+    };
+    later(next, per);
+}
+function rumble() {
+    try {
+        if (!audioCtx) return; const o = audioCtx.createOscillator(), f = audioCtx.createBiquadFilter(), g = audioCtx.createGain(), t = audioCtx.currentTime;
+        o.type = 'sawtooth'; o.frequency.value = 46; f.type = 'lowpass'; f.frequency.value = 170;
+        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.3 * Math.max(0.2, sfxVolume || 1), t + 1.3); g.gain.linearRampToValueAtTime(0.0001, t + 3.6);
+        o.connect(f); f.connect(g); g.connect(audioCtx.destination); o.start(t); o.stop(t + 3.7);
+    } catch (e) {}
+}
+
+// ---------------------------------------------------------------- 控制鎖定
+function lockControls() {
+    resetJoystick(joystickLeft); resetJoystick(joystickRight);
+    leftContainer.style.visibility = 'hidden'; rightContainer.style.display = 'none'; shootBtn.style.display = 'none'; skillBtn.style.display = 'none';
+}
+function unlockControls() {
+    leftContainer.style.visibility = 'visible'; rightContainer.style.display = 'flex'; shootBtn.style.display = 'flex'; skillBtn.style.display = 'flex';
+}
+function normalHud() {
+    CP.invuln = false; CP.skillInfinite = false; CP.skillLocked = false;
+    skillBtn.classList.remove('cp-locked'); skillBtn.innerText = 'SKILL';
+    gameUi.style.display = 'block'; gameUi.querySelectorAll('.ui-row').forEach(r => { r.style.display = ''; });
+}
+
+// ---------------------------------------------------------------- 世界
+function mkTankObj(k, x, y, isAlly, ang) {
+    const t = TANK_TEMPLATES[k];
+    return { type: k, isInfantry: false, x, y, bodyAngle: ang, turretAngle: ang, speed: 0, maxSpeed: t.maxSpeed, maxReverseSpeed: t.maxReverseSpeed, size: t.size, bodyTurnSpeed: t.bodyTurnSpeed, turretTurnSpeed: t.turretTurnSpeed,
+        shotCooldown: t.shotCooldown, lastShotTime: 0, hp: t.hp, maxHp: t.hp, frontArmor: t.frontArmor, sideArmor: t.sideArmor, damage: t.damage, pen: t.pen, sight: t.sight,
+        aiBehaviorTimer: 0, aiState: 'wander', wanderAngle: Math.random() * 6.283, wanderTimer: 0, idleTimer: 0, currentTarget: null, targetLockTimer: 0, lastDamageTime: 0, coverX: null, coverY: null, coverTimer: 0, isAlly, cpNearest: !isAlly };
+}
+function mkT34(x, y, order) { return Object.assign(mkTankObj('T3485', x, y, true, -Math.PI / 2), { cpScripted: true, go: false, idx: 0, parked: false, order }); }
+
+function buildWorld2() {
+    const B = (x, y, w, h, kind, extra) => { const o = Object.assign({ x, y, w, h, cpKind: kind }, extra || {}); buildings.push(o); return o; };
+    snowRoads = [{ w: 96, pts: [{ x: 250, y: 2450 }, { x: 700, y: 2420 }, { x: 1000, y: 2400 }].concat(R2, [{ x: 2150, y: 560 }, { x: 2420, y: 440 }]) }];
+    // 維修棚（三面牆，北側開口）、帳篷
+    B(SHED.x0 - 8, SHED.y0, 16, SHED.y1 - SHED.y0, 'shedwall'); B(SHED.x1 - 8, SHED.y0, 16, SHED.y1 - SHED.y0, 'shedwall'); B(SHED.x0, SHED.y1 - 8, SHED.x1 - SHED.x0, 16, 'shedwall');
+    B(430, 2380, 150, 104, 'tent'); B(440, 2640, 150, 104, 'tent'); B(650, 2800, 132, 96, 'tent'); B(640, 2160, 132, 96, 'tent');
+    // 被遺棄的卡車、廢棄建築
+    B(TRUCK.x, TRUCK.y, TRUCK.w, TRUCK.h, 'truck');
+    B(RUIN.x, RUIN.y, RUIN.w, 18, 'ruinwall'); B(RUIN.x, RUIN.y, 18, RUIN.h, 'ruinwall'); B(RUIN.x + RUIN.w - 18, RUIN.y, 18, RUIN.h, 'ruinwall');
+    B(RUIN.x, RUIN.y + RUIN.h - 18, 80, 18, 'ruinwall'); B(RUIN.x + 170, RUIN.y + RUIN.h - 18, 80, 18, 'ruinwall');
+    // 樹林（北方是森林；留出敵軍進場區、抵達區、卡車與廢墟周邊）
+    const dRoute = (x, y) => { let m = 1e9; const P = snowRoads[0].pts; for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1], vx = b.x - a.x, vy = b.y - a.y, k = clamp(((x - a.x) * vx + (y - a.y) * vy) / (vx * vx + vy * vy), 0, 1); m = Math.min(m, Math.hypot(x - a.x - vx * k, y - a.y - vy * k)); } return m; };
+    const inR = (x, y, r, m) => x > r.x0 - m && x < r.x1 + m && y > r.y0 - m && y < r.y1 + m;
+    const clearZones = [{ x0: 820, y0: 80, x1: 1850, y1: 760 }, { x0: 1650, y0: 520, x1: 2130, y1: 900 }, { x0: 1950, y0: 300, x1: 2480, y1: 640 }, { x0: 2400, y0: 140, x1: 2900, y1: 560 },
+        { x0: 250, y0: 2050, x1: 1700, y1: 2900 }];
+    const blocked = (x, y, m) => dRoute(x, y) < 115 + m || clearZones.some(z => inR(x, y, z, m));
+    const addTree = (x, y) => { const kr = Math.random(), kind = kr < 0.52 ? 'pine' : kr < 0.76 ? 'fir' : 'bare', v = Math.floor(rnd(0, kind === 'pine' ? 4 : kind === 'fir' ? 2 : 3)); buildings.push({ x: x - 15, y: y - 15, w: 30, h: 30, isTree: true, tk: kind, tv: v, flip: Math.random() < 0.5 }); };
+    for (let i = 0, g = 0; i < 170 && g < 4000; g++) { const x = rnd(60, 2940), y = rnd(60, 950); if (blocked(x, y, 25)) continue; addTree(x, y); i++; }
+    for (let i = 0, g = 0; i < 70 && g < 2000; g++) { const x = rnd(60, 2940), y = rnd(950, 2940); if (blocked(x, y, 40)) continue; addTree(x, y); i++; }
+    const scatter = (n, make, m) => { for (let i = 0, g = 0; i < n && g < n * 12; g++) { const x = rnd(60, 2940), y = rnd(60, 2940); if (blocked(x, y, m)) continue; snowDecals.push(make(x, y)); i++; } };
+    scatter(110, (x, y) => ({ type: 'small', kind: 'bush', x, y, rot: rnd(0, 6.283), sc: rnd(0.7, 1.35), v: Math.floor(rnd(0, 6)) }), 20);
+    scatter(36, (x, y) => ({ type: 'small', kind: 'rock', x, y, rot: rnd(0, 6.283), sc: rnd(0.6, 1.3), v: Math.floor(rnd(0, 6)) }), 20);
+    scatter(60, (x, y) => ({ type: 'mound', x, y, rot: rnd(0, 6.283), r: rnd(26, 62) }), 10);
+    scatter(50, (x, y) => ({ type: 'dune', x, y, rot: rnd(-0.35, -0.05), r: rnd(80, 190) }), 0);
+    // 路兩旁的積雪堆（「積雪道路」）
+    const P = snowRoads[0].pts; for (let i = 0; i < 90; i++) { const j = Math.floor(rnd(1, P.length - 1)), a = P[j], b = P[j + 1], k = Math.random(); const x = a.x + (b.x - a.x) * k + rnd(-130, 130), y = a.y + (b.y - a.y) * k + rnd(-130, 130); if (dRoute(x, y) > 70) snowDecals.push({ type: 'mound', x, y, rot: rnd(0, 6.283), r: rnd(24, 50) }); }
+    const prop = (type, x, y, v, rot) => snowDecals.push({ type, x, y, rot: rot || 0, sc: 1, v: v || 0 });
+    prop('firebarrel', 760, 2480); prop('firebarrel', 760, 2600); prop('crate', 820, 2380, 1, 0.2); prop('crate', 830, 2740, 2, -0.1); prop('barrel', 880, 2680, 1); prop('logs', 700, 2540, 0, 0.3);
+    prop('sack', 880, 2440, 0, 0.4); prop('lamp', 1210, 2510); prop('lamp', 1550, 2510); prop('lamp', 1000, 2400); prop('crate', 1240, 2690, 1, 0.1); prop('barrel', 1520, 2690, 0); prop('cart', 600, 2560, 0, 0.5);
+    prop('crate', 2090, 470, 2, 0.3); prop('sack', 2330, 520, 0, 0.1);
+}
+function makePeople2() {
+    CP.hero = mkPerson({ role: 'hero', x: 1300, y: 2330, ang: 2.9, style: STYLE.hero });
+    CP.crew = [
+        mkPerson({ role: 'driver', key: 'driver', x: 925, y: 2470, ang: 0.5, label: '伊凡', style: STYLE.driver, done: false, fixedAng: true }),
+        mkPerson({ role: 'gunner', key: 'gunner', x: 1080, y: 2650, ang: -1.6, label: '尼古拉', style: STYLE.gunner, done: false, fixedAng: true }),
+        mkPerson({ role: 'loader', key: 'loader', x: 915, y: 2655, ang: -0.9, label: '阿列克謝', style: STYLE.loader, done: false, fixedAng: true })
+    ];
+    CP.inst = mkPerson({ role: 'inst', x: 1780, y: 2190, ang: Math.PI, label: '軍官', style: STYLE.inst });
+    CP.scouts = [
+        mkPerson({ role: 'scout', x: 2650, y: 348, ang: 2.3, scale: 0.94, wounded: true, style: STYLE.scout }),
+        mkPerson({ role: 'scout', x: 2712, y: 366, ang: 3.0, style: STYLE.scout })
+    ];
+    CP.people = [CP.hero, ...CP.crew, CP.inst, ...CP.scouts];
+    CP.t34 = [mkT34(1290, 2610, 0), mkT34(1470, 2610, 1)];
+    CP.t34.forEach(t => allies.push(t));
+    CP.lights = LIGHTS2;
+}
+
+// ---------------------------------------------------------------- 劇情流程
+function finishIntro2() {
+    CP.step = 'officerWalk'; CP.busy = true; CP.canMove = false;
+}
+function onStep2(step) {
+    if (step === 'follow') { CP.t34[0].go = true; later(() => { CP.t34[1].go = true; }, 1500); }
+    if (step === 'ambush') startAmbush();
+}
+function beginBoard(onDone) {
+    CP.step = 'boarding'; CP.busy = true; CP.canMove = false; CP.resetMove(); setPrompt(''); $('cpMove').style.display = 'none'; leftContainer.style.visibility = 'hidden';
+    const by = r => (r === 'hero' ? CP.hero : CP.crew.find(c => c.role === r));
+    playBoarding(tank, ['driver', 'gunner', 'loader', 'hero'].map(by), onDone);
+}
+function startCrewTalk2() {
+    CP.busy = true; CP.canMove = false; CP.resetMove(); setPrompt(''); $('cpMove').style.display = 'none';
+    const h = CP.hero; CP.camFocus = { x: (h.x + tank.x) / 2, y: (h.y + tank.y) / 2 };
+    CP.crew.forEach(c => { c.fixedAng = false; });
+    dlgStart(T2.crew, () => { CP.camFocus = null; CP.crewGoTank = true; beginBoard(() => enterTankMode('follow')); });
+}
+
+// 切換成「步行視角」（IS-2 停下，操作改成搖桿控制主角）
+function toInfantryView() {
+    resetJoystick(joystickLeft); resetJoystick(joystickRight);
+    spectatorCamera.x = tank.x; spectatorCamera.y = tank.y; spectatorCamera.zoom = currentCameraScale;
+    isSpectatorMode = true; tank.speed = 0; CP.camFocus = tank; CP.zoomWant = CP.heroZoom * 1.28; CP.zoomTarget = 1; CP.zoomMul = 1;
+    leftContainer.style.visibility = 'hidden'; rightContainer.style.display = 'none'; shootBtn.style.display = 'none'; skillBtn.style.display = 'none'; gameUi.style.display = 'none';
+    syncSettingsBtn();
+}
+// 下車動畫（與上車相反：艙蓋打開 → 爬出 → 沿護板走下來）。可重複使用
+function playUnboarding(tk, people, onDone) {
+    const ca = Math.cos(tk.bodyAngle), sa = Math.sin(tk.bodyAngle), W2 = l => ({ x: tk.x + l[0] * ca - l[1] * sa, y: tk.y + l[0] * sa + l[1] * ca });
+    CP.hatchOpen = {};
+    people.forEach(p => { p.hidden = true; p.scale = 0.2; p.alpha = 0; p.z = 1; p.moving = false; });
+    CP.unboard = { t: 0, onDone, closeT: -1, list: people.map((p, i) => ({ p, role: p.role, g: W2(BOARD[p.role].G), f: W2(BOARD[p.role].F), h: W2(BOARD[p.role].H), delay: 500 + i * 520, state: 'wait', t: 0 })) };
+}
+function updateUnboarding(dt) {
+    const u = CP.unboard; if (!u) return;
+    u.t += dt; let all = true;
+    for (const s of u.list) {
+        const p = s.p; if (s.state === 'done') continue; all = false;
+        if (u.t < s.delay) continue;
+        if (s.state === 'wait') { s.state = 'rise'; s.t = 0; p.x = s.h.x; p.y = s.h.y; p.hidden = false; CP.hatchOpen[s.role] = s.h; }
+        s.t += dt;
+        if (s.state === 'rise') { const k = clamp(s.t / 420, 0, 1); p.scale = 0.2 + 0.8 * k; p.alpha = k; p.z = 1; if (k >= 1) { s.state = 'hatch'; s.t = 0; } }
+        else if (s.state === 'hatch') {
+            const k = clamp(s.t / 520, 0, 1), e = easeIO(k); p.x = s.h.x + (s.f.x - s.h.x) * e; p.y = s.h.y + (s.f.y - s.h.y) * e; p.moving = true; p.walk += 0.25;
+            p.ang = turnTo(p.ang, Math.atan2(s.f.y - s.h.y, s.f.x - s.h.x), 0.3);
+            if (k >= 1) { s.state = 'climb'; s.t = 0; delete CP.hatchOpen[s.role]; }
+        } else if (s.state === 'climb') {
+            const k = clamp(s.t / 650, 0, 1), e = easeIO(k); p.x = s.f.x + (s.g.x - s.f.x) * e; p.y = s.f.y + (s.g.y - s.f.y) * e; p.z = 1 - e; p.moving = true; p.walk += 0.25;
+            p.ang = turnTo(p.ang, Math.atan2(s.g.y - s.f.y, s.g.x - s.f.x), 0.3);
+            if (k >= 1) { s.state = 'done'; p.moving = false; p.z = 0; p.scale = 1; p.alpha = 1; }
+        }
+    }
+    if (all && u.closeT < 0) u.closeT = 0;
+    if (u.closeT >= 0) { u.closeT += dt; if (u.closeT > 450) { const cb = u.onDone; CP.unboard = null; if (cb) cb(); } }
+}
+function startUnboard() {
+    CP.step = 'unboard'; CP.busy = true; setPrompt(''); CP.objective = null;
+    toInfantryView();
+    playUnboarding(tank, ['hero', 'loader', 'gunner', 'driver'].map(r => (r === 'hero' ? CP.hero : CP.crew.find(c => c.role === r))), () => {
+        CP.camFocus = null; CP.zoomWant = CP.heroZoom; CP.busy = false; CP.canMove = true;
+        leftContainer.style.visibility = 'visible'; initFixedJoystickPositions(); $('cpMove').style.display = 'block';
+        setStep('search');
+    });
+}
+
+function truckScene() {
+    CP.truckDone = true; CP.busy = true; CP.canMove = false; CP.resetMove(); $('cpMove').style.display = 'none'; setPrompt('');
+    narrateSeq(['玩家抵達一處森林邊緣，發現一輛被遺棄的蘇聯軍用卡車。', '附近沒有看到偵察小隊的人員。'], () => dlgStart(T2.truck, () => {
+        CP.busy = false; CP.canMove = true; $('cpMove').style.display = 'block'; setStep('search'); CP.objective = { x: RUIN.x + 130, y: RUIN.y + 120 };
+    }));
+}
+function scoutScene() {
+    CP.scoutDone = true; CP.busy = true; CP.canMove = false; CP.resetMove(); $('cpMove').style.display = 'none'; setPrompt(''); CP.objective = null;
+    const h = CP.hero, s0 = CP.scouts[0]; h.ang = Math.atan2(s0.y - h.y, s0.x - h.x); CP.scouts.forEach(s => { s.ang = Math.atan2(h.y - s.y, h.x - s.x); });
+    narrateSeq(['玩家沿著煙霧方向前進，終於發現兩名蘇聯士兵躲在一處廢棄建築內。', '其中一名士兵受了傷。'], () => dlgStart(T2.scout, () => {
+        // 車組員瞬移到畫面外，再走過來
+        const R = Math.max(window.innerWidth, window.innerHeight) / spectatorCamera.zoom / 2 + 280, a = Math.atan2(tank.y - h.y, tank.x - h.x);
+        CP.crew.forEach((c, i) => { c.x = h.x + Math.cos(a + (i - 1) * 0.28) * R; c.y = h.y + Math.sin(a + (i - 1) * 0.28) * R; c.followT = h; c.followDist = 70 + i * 36; c.fixedAng = false; });
+        CP.scouts.forEach((s, i) => { s.followT = h; s.followDist = 60 + i * 40; });
+        CP.busy = false; CP.canMove = true; $('cpMove').style.display = 'block'; setStep('toTank2');
+    }));
+}
+function startBoard2() {
+    CP.scouts.forEach(s => { s.hidden = true; });
+    beginBoard(() => enterTankMode('ambush'));
+    rumble(); narrate('就在玩家上車準備撤離時，前方突然傳來引擎聲。', 3600);
+}
+
+function startAmbush() {
+    CP.busy = true; CP.canMove = false; lockControls(); CP.crewGoTank = false;
+    ENEMY_SP.forEach(p => { const e = mkTankObj('Panzer4', p.x, p.y, false, Math.atan2(ARR.y - p.y, ARR.x - p.x)); e.cpHold = true; e.cpAdvance = true; enemies.push(e); });
+    CP.enemiesSpawned = true; rumble();
+    // 鏡頭離開坦克，慢慢移到敵人身上
+    spectatorCamera.x = tank.x; spectatorCamera.y = tank.y; spectatorCamera.zoom = currentCameraScale; isSpectatorMode = true; syncSettingsBtn();
+    const cx = ENEMY_SP.reduce((a, p) => a + p.x, 0) / ENEMY_SP.length, cy = ENEMY_SP.reduce((a, p) => a + p.y, 0) / ENEMY_SP.length;
+    CP.zoomWant = baseCameraScale(350) * 0.7;
+    later(() => { CP.camFocus = { x: cx, y: cy }; }, 700);
+    later(() => narrate('尼古拉立刻注意到森林另一側出現了三輛德軍 Panzer IV。', 3000, () => dlgStart(T2.ambush, endAmbush)), 3200);
+}
+function endAmbush() {   // 鏡頭移回自己的坦克，再開始戰鬥
+    CP.camFocus = tank; CP.zoomWant = baseCameraScale(tank.sight);
+    later(() => { currentCameraScale = spectatorCamera.zoom; isSpectatorMode = false; CP.camFocus = null; CP.zoomTarget = 1; CP.zoomMul = 1; syncSettingsBtn(); startBattle(); }, 1700);
+}
+function startBattle() {
+    CP.reveal = false; CP.zoomTarget = 1; CP.battle = true; CP.defeatShown = false;
+    enemies.forEach(e => { e.cpHold = false; }); CP.t34.forEach(t => { t.cpScripted = false; t.cpEscort = true; });
+    normalHud(); unlockControls(); CP.busy = false; setStep('battle');
+    try { playStartBattleSound(); } catch (e) {}
+}
+function spawnBattleUnits() {
+    allies = []; enemies = [];
+    CP.t34 = [mkT34(T34_FIN[0].x, T34_FIN[0].y, 0), mkT34(T34_FIN[1].x, T34_FIN[1].y, 1)]; CP.t34.forEach((t, i) => { t.cpScripted = false; t.cpEscort = true; t.bodyAngle = t.turretAngle = -2.2; t.parked = true; allies.push(t); });
+    ENEMY_SP.forEach(p => { const x = ARR.x + (p.x - ARR.x) * 0.55, y = ARR.y + (p.y - ARR.y) * 0.55, e = mkTankObj('Panzer4', x, y, false, Math.atan2(ARR.y - y, ARR.x - x)); e.cpAdvance = true; enemies.push(e); });
+}
+function retryBattle() {
+    clearTimers(); $('cpDefeat').style.display = 'none'; defeatMenuContainer.style.display = 'none'; try { document.getElementById('respawnPanel').style.display = 'none'; } catch (e) {}
+    wrecks = []; enemyBullets = []; allyBullets = []; tank.bullets = []; smokeParticles = []; impactFx = []; muzzleFlashes = []; hitEffects = []; sparks = []; grayFlashAlpha = 0; redFlashAlpha = 0; screenShakeIntensity = 0;
+    initPlayerTankState(); tank.x = ARR.x; tank.y = ARR.y; tank.bodyAngle = tank.turretAngle = -2.2; tank.isDead = false; tank.deathAnimTimer = 0; tank.hp = tank.maxHp; isSpectatorMode = false;
+    currentCameraScale = baseCameraScale(tank.sight);
+    spawnBattleUnits(); CP.defeatShown = false; CP.battle = true; normalHud(); unlockControls(); leftContainer.style.display = 'flex'; rightContainer.style.display = 'flex'; shootBtn.style.display = 'flex'; skillBtn.style.display = 'flex';
+    CP.busy = false; CP.win = false; CP.step = 'battle'; setPrompt('擊毀敵方坦克');
+}
+$('cpRetry').addEventListener('click', retryBattle);
+$('cpDefMenu').addEventListener('click', () => { backToMenuAction(); cleanup(false); });
+
+function winBattle() {
+    CP.win = true; CP.battle = false; CP.busy = true; setPrompt('');
+    later(() => {
+        lockControls(); gameUi.style.display = 'none';
+        const f = $('cpFade'); f.style.display = 'block'; void f.offsetWidth; f.style.opacity = 1;
+        later(nightScene, 3000);
+    }, 1800);
+}
+function nightScene() {
+    try { stopBattleMusic(); } catch (e) {}
+    narrate('戰鬥結束後，玩家成功保護偵察兵，並與 T-34-85 一同返回部隊。', 3800, setupNight);
+}
+function setupNight() {
+    wrecks = []; enemies = []; enemyBullets = []; allyBullets = []; tank.bullets = []; smokeParticles = []; impactFx = []; muzzleFlashes = []; trackMarks = []; hitEffects = []; sparks = []; shermanSmokes = [];
+    tank.x = TANK2.x; tank.y = TANK2.y; tank.bodyAngle = tank.turretAngle = -Math.PI / 2; tank.speed = 0; tank.hp = tank.maxHp; tank.isDead = false;
+    allies = []; CP.t34 = [mkT34(1290, 2610, 0), mkT34(1470, 2610, 1)]; CP.t34.forEach(t => { t.parked = true; allies.push(t); });
+    CP.night = true; CP.step = 'night'; CP.busy = true; CP.canMove = false; CP.camFocus = tank; CP.zoomWant = CP.heroZoom * 1.2;
+    CP.people.forEach(p => { p.followT = null; p.goto = null; });
+    CP.crew.forEach(c => { c.hidden = true; c.fixedAng = false; }); CP.hero.hidden = true; CP.scouts.forEach(s => { s.hidden = true; });
+    toInfantryView(); spectatorCamera.zoom = CP.zoomWant; spectatorCamera.x = tank.x; spectatorCamera.y = tank.y;
+    const f = $('cpFade'); void f.offsetWidth; f.style.opacity = 0;
+    later(() => narrateSeq(['夜晚，IS-2 返回營地。', '車組從坦克裡出來，終於能夠休息。'], () => {
+        playUnboarding(tank, ['hero', 'loader', 'gunner', 'driver'].map(r => (r === 'hero' ? CP.hero : CP.crew.find(c => c.role === r))), () => {
+            dlgStart(T2.final, () => {
+                const n = CP.crew.find(c => c.role === 'gunner');
+                n.goto = { x: tank.x - 230, y: tank.y + 140 }; n.gs = 1.3; n.gotoDone = p => { p.ang = Math.atan2(tank.y - p.y, tank.x - p.x); };
+                later(() => narrate('尼古拉沒有說話，只是默默地看著遠處的 IS-2。', 4200, () => later(endChapter, 800)), 1500);
+            });
+        });
+    }, 3000), 2600);
+}
+
+// ---------------------------------------------------------------- 每幀（第二章）
+function updateFollowers(dS) {
+    for (const p of CP.people) {
+        if (p === CP.hero || p.hidden || CP.boarding || CP.unboard) continue;
+        if (p.goto) {
+            const dx = p.goto.x - p.x, dy = p.goto.y - p.y, d = Math.hypot(dx, dy), sp = (p.gs || 2) * dS;
+            if (d < 6) { const cb = p.gotoDone; p.goto = null; p.moving = false; if (cb) cb(p); }
+            else { p.x += dx / d * Math.min(sp, d); p.y += dy / d * Math.min(sp, d); p.ang = turnTo(p.ang, Math.atan2(dy, dx), 0.25); p.walk += sp * 0.4; p.moving = true; }
+        } else if (p.followT) {
+            const t = p.followT, dx = t.x - p.x, dy = t.y - p.y, d = Math.hypot(dx, dy);
+            if (d > p.followDist) { const sp = (d > 300 ? 3.2 : 2.2) * dS; p.x += dx / d * sp; p.y += dy / d * sp; p.ang = turnTo(p.ang, Math.atan2(dy, dx), 0.25); p.walk += sp * 0.4; p.moving = true; collideCircle(p, 12); }
+            else { p.moving = false; p.ang = turnTo(p.ang, Math.atan2(dy, dx), 0.08); }
+        } else if (p.role === 'scout') p.moving = false;
+    }
+}
+function updateT34(dS) {
+    for (const t of CP.t34 || []) {
+        if (!t.cpScripted || t.hp <= 0) continue;
+        if (!t.go || t.parked) { t.speed = 0; continue; }
+        const dT = Math.hypot(tank.x - t.x, tank.y - t.y);
+        if (t.idx < 2 && !t.arrivedFront) t.waiting = false;               // 一開始先自己開到前方（不管玩家有沒有動）
+        else if (dT > 460) t.waiting = true; else if (dT < 330) t.waiting = false;
+        const lead = CP.t34[0];
+        if (t.order === 1 && Math.hypot(lead.x - t.x, lead.y - t.y) < 115 && !lead.parked) { t.speed = 0; continue; }
+        if (t.waiting && t.idx < R2.length) { t.speed = 0; continue; }
+        const tgt = t.idx < R2.length ? R2[t.idx] : T34_FIN[t.order], dx = tgt.x - t.x, dy = tgt.y - t.y, d = Math.hypot(dx, dy);
+        if (t.idx < R2.length) { if (d < 55) { t.idx++; if (t.idx >= 2) t.arrivedFront = true; continue; } } else if (d < 16) { t.parked = true; t.speed = 0; t.arrivedFront = true; t.bodyAngle = t.turretAngle = -2.2; continue; }
+        const ox = t.x, oy = t.y, want = Math.atan2(dy, dx);
+        t.bodyAngle = turnTo(t.bodyAngle, want, 0.07 * dS); t.turretAngle = t.bodyAngle;
+        const err = Math.abs(angDiff(t.bodyAngle, want)), sp = t.maxSpeed * 0.72 * (err > 0.6 ? 0.3 : 1) * dS;
+        t.x += Math.cos(t.bodyAngle) * sp; t.y += Math.sin(t.bodyAngle) * sp; t.speed = sp / dS;
+        try { handleTankBuildingCollision(t); } catch (e) {}
+        try { addTrackMark(t, ox, oy); } catch (e) {}
+    }
+}
+function pre2(dt, dS, now) {
+    updateT34(dS); updateUnboarding(dt);
+    if (!isSpectatorMode) return;
+    const h = CP.hero, o = CP.inst;
+    for (const t of CP.t34 || []) { const dx = h.x - t.x, dy = h.y - t.y, d = Math.hypot(dx, dy); if (d < 52 && d > 0 && !CP.boarding) { h.x = t.x + dx / d * 52; h.y = t.y + dy / d * 52; } }
+    if (CP.step === 'officerWalk') {
+        const dx = h.x - o.x, dy = h.y - o.y, d = Math.hypot(dx, dy);
+        if (d > 100) { const sp = 2.1 * dS; o.x += dx / d * sp; o.y += dy / d * sp; o.ang = turnTo(o.ang, Math.atan2(dy, dx), 0.25); o.walk += sp * 0.4; o.moving = true; }
+        else {
+            o.moving = false; o.ang = Math.atan2(dy, dx); h.ang = Math.atan2(-dy, -dx); CP.step = 'officerTalk'; CP.camFocus = { x: (o.x + h.x) / 2, y: (o.y + h.y) / 2 };
+            dlgStart(T2.officer, () => { CP.camFocus = null; CP.busy = false; CP.canMove = true; leftContainer.style.visibility = 'visible'; initFixedJoystickPositions(); $('cpMove').style.display = 'block'; setStep('toCrew'); });
+        }
+        return;
+    }
+    if (CP.busy) return;
+    if (CP.step === 'toCrew') { if (Math.hypot(h.x - tank.x, h.y - tank.y) < 175) startCrewTalk2(); }
+    else if (CP.step === 'search') {
+        if (!CP.truckDone && Math.hypot(h.x - (TRUCK.x + TRUCK.w / 2), h.y - (TRUCK.y + TRUCK.h / 2)) < 210) truckScene();
+        else if (!CP.scoutDone && Math.hypot(h.x - CP.scouts[0].x, h.y - CP.scouts[0].y) < 150) scoutScene();
+    } else if (CP.step === 'toTank2') {
+        const near = Math.hypot(h.x - tank.x, h.y - tank.y) < 330;
+        if (near) {
+            CP.crewGoTank = true; CP.crew.forEach(c => { c.followT = null; });
+            const lead = CP.t34[0];
+            for (const s of CP.scouts) {   // 偵察兵走向 T-34 搭乘
+                s.followT = null; if (s.hidden) continue; const dx = lead.x - s.x, dy = lead.y - s.y, d = Math.hypot(dx, dy);
+                if (d < 50) s.hidden = true; else { const sp = 2.2 * dS; s.x += dx / d * sp; s.y += dy / d * sp; s.ang = turnTo(s.ang, Math.atan2(dy, dx), 0.25); s.walk += sp * 0.4; s.moving = true; }
+            }
+            const ready = CP.crew.every(c => { const g = CP.boardSpot(c); return Math.hypot(g.x - c.x, g.y - c.y) < 8; });
+            if (ready && CP.scouts.every(s => s.hidden) && Math.hypot(h.x - tank.x, h.y - tank.y) < 108) startBoard2();
+        }
+    }
+}
+function post2() {
+    if (CP.battle && tank.isDead && tank.deathAnimTimer >= 90 && !CP.defeatShown) {
+        CP.defeatShown = true; defeatMenuContainer.style.display = 'none'; $('cpDefeat').style.display = 'flex';
+    }
+    if (CP.battle && CP.enemiesSpawned && !tank.isDead && !CP.win && enemies.length && enemies.every(e => e.hp <= 0)) winBattle();
+    if (CP.battle && CP.enemiesSpawned && !CP.win && !enemies.length) winBattle();
+    if (isSpectatorMode || CP.busy) return;
+    const lead = CP.t34[0], dL = Math.hypot(tank.x - lead.x, tank.y - lead.y);
+    if (CP.step === 'follow') { CP.objective = { x: lead.x, y: lead.y }; if (lead.idx >= 2 && dL < 420) setStep('road'); }
+    else if (CP.step === 'road') {
+        CP.objective = { x: lead.x, y: lead.y };
+        if (lead.idx >= 4 && !CP.midDone && dL < 520) { CP.midDone = true; autoDlg(T2.mid, 3300, () => setStep('arrive')); }
+    } else if (CP.step === 'arrive') {
+        CP.objective = { x: ARR.x, y: ARR.y };
+        if (CP.t34.every(t => t.parked) && Math.hypot(tank.x - ARR.x, tank.y - ARR.y) < 270) startUnboard();
+    }
+}
+
+// ---------------------------------------------------------------- 繪製（第二章）
+function drawTruck(b) {
+    const c = ctx; c.save(); c.translate(b.x + b.w / 2, b.y + b.h / 2);
+    c.fillStyle = 'rgba(30,40,60,0.28)'; c.fillRect(-72, -28, 150, 70);
+    c.fillStyle = '#16181a'; for (const x of [-52, -10, 50]) { c.fillRect(x - 11, -37, 22, 8); c.fillRect(x - 11, 29, 22, 8); }
+    c.fillStyle = '#4b573a'; c.fillRect(-75, -32, 104, 64); c.strokeStyle = '#2a3120'; c.lineWidth = 2; c.strokeRect(-75, -32, 104, 64);
+    c.strokeStyle = 'rgba(0,0,0,0.25)'; c.lineWidth = 1.5; for (let x = -60; x < 28; x += 16) { c.beginPath(); c.moveTo(x, -32); c.lineTo(x, 32); c.stroke(); }
+    c.fillStyle = '#566548'; c.fillRect(31, -28, 44, 56); c.strokeRect(31, -28, 44, 56);
+    c.fillStyle = '#1b2327'; c.fillRect(62, -23, 10, 46); c.fillStyle = '#3d4a31'; c.fillRect(34, -22, 24, 44);
+    c.fillStyle = 'rgba(248,252,255,0.93)'; c.beginPath(); c.ellipse(-40, -12, 26, 10, 0, 0, 6.283); c.fill(); c.beginPath(); c.ellipse(-8, 14, 16, 8, 0, 0, 6.283); c.fill(); c.beginPath(); c.ellipse(48, -6, 11, 7, 0, 0, 6.283); c.fill();
+    c.fillStyle = '#c0392b'; c.beginPath(); c.arc(-30, 10, 5, 0, 6.283); c.fill();   // 紅星
+    c.restore();
+}
+function drawRuinWall(b) {
+    const c = ctx, horiz = b.w > b.h; c.save();
+    c.fillStyle = 'rgba(30,40,60,0.28)'; c.fillRect(b.x + 4, b.y + 5, b.w, b.h);
+    c.fillStyle = '#7a6a5c'; c.fillRect(b.x, b.y, b.w, b.h); c.strokeStyle = '#3f352d'; c.lineWidth = 2; c.strokeRect(b.x, b.y, b.w, b.h);
+    c.strokeStyle = 'rgba(0,0,0,0.3)'; c.lineWidth = 1.2;
+    for (let i = 0; i < (horiz ? b.w : b.h); i += 24) { c.beginPath(); if (horiz) { c.moveTo(b.x + i, b.y); c.lineTo(b.x + i, b.y + b.h); } else { c.moveTo(b.x, b.y + i); c.lineTo(b.x + b.w, b.y + i); } c.stroke(); }
+    c.fillStyle = 'rgba(246,250,254,0.9)'; for (let i = 6; i < (horiz ? b.w : b.h) - 20; i += 52) { if (horiz) c.fillRect(b.x + i, b.y, 28, 6); else c.fillRect(b.x, b.y + i, 6, 28); }
+    c.restore();
+}
+function drawShedWall(b) {
+    const c = ctx; c.save(); c.fillStyle = 'rgba(30,40,60,0.26)'; c.fillRect(b.x + 4, b.y + 5, b.w, b.h);
+    c.fillStyle = '#5a4630'; c.fillRect(b.x, b.y, b.w, b.h); c.strokeStyle = '#2b2014'; c.lineWidth = 2; c.strokeRect(b.x, b.y, b.w, b.h);
+    c.fillStyle = 'rgba(246,250,254,0.92)'; if (b.w > b.h) c.fillRect(b.x, b.y, b.w, 5); else c.fillRect(b.x, b.y, 5, b.h); c.restore();
+}
+function drawDecor2(vr) {
+    const c = ctx, now = Date.now(), t = now / 1000;
+    c.save();
+    c.fillStyle = 'rgba(118,110,98,0.30)'; c.fillRect(300, 2150, 1260, 660);
+    c.fillStyle = 'rgba(70,64,56,0.42)'; c.fillRect(SHED.x0, SHED.y0, SHED.x1 - SHED.x0, SHED.y1 - SHED.y0);
+    // 維修棚：屋樑與立柱（不遮住裡面的坦克）
+    c.strokeStyle = '#4a3924'; c.lineWidth = 7; for (let y = SHED.y0 + 24; y < SHED.y1; y += 70) { c.beginPath(); c.moveTo(SHED.x0, y); c.lineTo(SHED.x1, y); c.stroke(); }
+    c.fillStyle = 'rgba(246,250,254,0.85)'; for (let y = SHED.y0 + 24; y < SHED.y1; y += 70) for (let x = SHED.x0 + 20; x < SHED.x1 - 40; x += 110) c.fillRect(x, y - 5, 64, 6);
+    c.fillStyle = '#3b2c1c'; for (const x of [SHED.x0, (SHED.x0 + SHED.x1) / 2, SHED.x1]) { c.beginPath(); c.arc(x, SHED.y0, 9, 0, 6.283); c.fill(); }
+    c.restore();
+    drawSign(SHED.x0 + 90, SHED.y0 - 70, 150, '維修棚', 'REPAIR SHED');
+    drawSign(560, 2330, 170, '臨時駐地', 'CAMP');
+    // 廢墟：內部地面、餘燼與濃煙
+    const rc = { x: RUIN.x + 125, y: RUIN.y + 90 };
+    c.save(); c.fillStyle = 'rgba(40,34,30,0.5)'; c.fillRect(RUIN.x + 18, RUIN.y + 18, RUIN.w - 36, RUIN.h - 36); c.restore();
+    c.save(); for (const [dx, dy, r] of [[-30, 10, 10], [20, -20, 8], [40, 30, 7]]) { const f = 0.6 + 0.4 * Math.sin(t * 7 + dx); c.fillStyle = `rgba(255,${120 + 60 * f | 0},40,${0.55 + 0.3 * f})`; c.beginPath(); c.arc(rc.x + dx, rc.y + dy, r * (0.8 + 0.3 * f), 0, 6.283); c.fill(); } c.restore();
+    const ref = isSpectatorMode ? CP.hero : tank;
+    if (ref && Math.hypot(ref.x - rc.x, ref.y - rc.y) < 2200 && Math.random() < 0.9)
+        smokeParticles.push({ x: rc.x + rnd(-14, 14), y: rc.y + rnd(-14, 14), vx: rnd(0.15, 0.55), vy: -rnd(0.7, 1.2), life: 190 + rnd(0, 60), maxLife: 250, size: 7 + rnd(0, 4), color: '#4e5359' });
+    // 目標圈
+    const o = CP.objective;
+    if (o) {
+        const k = 0.5 + 0.5 * Math.sin(t * 4);
+        c.save(); c.strokeStyle = `rgba(255,214,90,${0.55 + 0.35 * k})`; c.lineWidth = 3; c.setLineDash([10, 8]); c.lineDashOffset = -t * 24; c.beginPath(); c.arc(o.x, o.y, 46 + k * 8, 0, 6.283); c.stroke(); c.setLineDash([]);
+        c.fillStyle = `rgba(255,214,90,${0.12 + 0.08 * k})`; c.beginPath(); c.arc(o.x, o.y, 46 + k * 8, 0, 6.283); c.fill(); c.restore();
+    }
+}
+function drawNight() {
+    const w = canvas.width, h = canvas.height; if (!CP._nc) CP._nc = document.createElement('canvas');
+    const nc = CP._nc; if (nc.width !== w || nc.height !== h) { nc.width = w; nc.height = h; }
+    const g = nc.getContext('2d'), z = spectatorCamera.zoom, t = Date.now() / 1000;
+    g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, w, h); g.fillStyle = 'rgba(5,9,34,0.7)'; g.fillRect(0, 0, w, h);
+    g.globalCompositeOperation = 'destination-out';
+    const L2 = CP.lights || [];
+    L2.forEach((l, i) => {
+        const sx = (l.x - spectatorCamera.x) * z + w / 2, sy = (l.y - spectatorCamera.y) * z + h / 2, r = l.r * z * (1 + 0.04 * Math.sin(t * 9 + i * 2));
+        const gr = g.createRadialGradient(sx, sy, 0, sx, sy, r); gr.addColorStop(0, 'rgba(0,0,0,0.95)'); gr.addColorStop(0.55, 'rgba(0,0,0,0.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = gr; g.beginPath(); g.arc(sx, sy, r, 0, 6.283); g.fill();
+    });
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(nc, 0, 0);
+    ctx.globalCompositeOperation = 'lighter';
+    L2.forEach((l, i) => {
+        const sx = (l.x - spectatorCamera.x) * z + w / 2, sy = (l.y - spectatorCamera.y) * z + h / 2, r = l.r * z * 0.8 * (1 + 0.05 * Math.sin(t * 9 + i * 2));
+        const gr = ctx.createRadialGradient(sx, sy, 0, sx, sy, r); gr.addColorStop(0, 'rgba(255,170,70,0.28)'); gr.addColorStop(1, 'rgba(255,120,30,0)');
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(sx, sy, r, 0, 6.283); ctx.fill();
+    });
+    ctx.restore();
+}
+
+
+// T-34 護衛：沒看到敵人、或離玩家太遠時，回到玩家身邊的隊形位置；看到敵人且在玩家附近才交給原本的 AI 開火
+function escortIfNeeded(e) {
+    if (tank.isDead) return false;
+    const dP = Math.hypot(tank.x - e.x, tank.y - e.y);
+    const foe = enemies.some(f => f.hp > 0 && Math.hypot(f.x - e.x, f.y - e.y) < e.sight * 1.1);
+    if (foe && dP < 600) return false;
+    const a = tank.bodyAngle + (e.order === 1 ? -2.3 : 2.3), sx = tank.x + Math.cos(a) * 200, sy = tank.y + Math.sin(a) * 200;
+    const dx = sx - e.x, dy = sy - e.y, d = Math.hypot(dx, dy);
+    let near = null, nd = 1e9; for (const f of enemies) if (f.hp > 0) { const q = Math.hypot(f.x - e.x, f.y - e.y); if (q < nd) { nd = q; near = f; } }
+    if (d < 60) { e.speed = 0; if (near && nd < e.sight * 1.1) e.turretAngle = turnTo(e.turretAngle, Math.atan2(near.y - e.y, near.x - e.x), 0.1); return true; }
+    const ox = e.x, oy = e.y, want = Math.atan2(dy, dx);
+    e.bodyAngle = turnTo(e.bodyAngle, want, 0.06); e.turretAngle = turnTo(e.turretAngle, near && nd < e.sight * 1.1 ? Math.atan2(near.y - e.y, near.x - e.x) : e.bodyAngle, 0.1);
+    const sp = e.maxSpeed * (d > 300 ? 0.95 : 0.65); e.x += Math.cos(e.bodyAngle) * sp; e.y += Math.sin(e.bodyAngle) * sp; e.speed = sp;
+    try { handleTankBuildingCollision(e); } catch (_) {}
+    try { addTrackMark(e, ox, oy); } catch (_) {}
+    return true;
+}
+
+// 敵人離玩家很遠、還沒發現任何目標時：直接朝玩家推進（發現後交還給原本的 AI）
+function advanceIfFar(e) {
+    const foes = [tank].concat(allies).filter(t => t && t.hp > 0 && !t.isDead);
+    if (!foes.length) return false;
+    let best = null, bd = 1e9; for (const t of foes) { const d = Math.hypot(t.x - e.x, t.y - e.y); if (d < bd) { bd = d; best = t; } }
+    if (bd < e.sight * 1.1) return false;
+    const ox = e.x, oy = e.y, want = Math.atan2(best.y - e.y, best.x - e.x);
+    e.bodyAngle = turnTo(e.bodyAngle, want, 0.05); e.turretAngle = e.bodyAngle;
+    const sp = e.maxSpeed * 0.75; e.x += Math.cos(e.bodyAngle) * sp; e.y += Math.sin(e.bodyAngle) * sp; e.speed = sp;
+    try { handleTankBuildingCollision(e); } catch (_) {}
+    try { addTrackMark(e, ox, oy); } catch (_) {}
+    return true;
+}
+
 // ================================================================ 掛接到原本的遊戲迴圈
 (function installHooks() {
     const _update = update;
@@ -12887,6 +13404,7 @@ function drawTop() {
     draw = function () {
         _draw();
         if (!CP.active) return;
+        if (CP.night && isSpectatorMode) drawNight();
         if (isSpectatorMode && CP.canMove && !CP.busy) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); drawJoystickKnob(joystickLeft); ctx.restore(); }
     };
     const _dsp = drawSnowProps;
@@ -12896,7 +13414,10 @@ function drawTop() {
     const _dm = drawMarkers;
     drawMarkers = function () { if (CP.active) drawTop(); _dm(); };
     const _uat = updateAiTank;
-    updateAiTank = function (e) { if (e && e.cpDummy) return; return _uat.apply(this, arguments); };
+    updateAiTank = function (e) {
+        if (e && (e.cpDummy || e.cpScripted || e.cpHold)) return;
+        if (e && e.cpAdvance && e.hp > 0 && !e.isInfantry && advanceIfFar(e)) return;
+        if (e && e.cpEscort && e.hp > 0 && !e.isInfantry && escortIfNeeded(e)) return; return _uat.apply(this, arguments); };
     const _bcs = baseCameraScale;
     baseCameraScale = function (s) { const k = _bcs(s); return CP.active ? k * CP.zoomMul : k; };
     const _uts = useTankSkill;
@@ -12904,7 +13425,7 @@ function drawTop() {
         if (!CP.active) return _uts();
         if (isSpectatorMode || CP.busy) return;
         if (CP.skillLocked) { toast('技能尚未解鎖'); return; }
-        if (tank.skillState === 'ready') { _uts(); tank.skillDuration = 1e9; tank.skillTimeLeft = 1e9; }   // 技能持續時間無限
+        if (tank.skillState === 'ready') { _uts(); if (CP.skillInfinite) { tank.skillDuration = 1e9; tank.skillTimeLeft = 1e9; } }   // 第一章：技能持續時間無限
     };
 })();
 
@@ -12913,7 +13434,7 @@ function cleanup(silent) {
     clearTimers(); clearTimeout(promptTimer); clearInterval(D.timer);
     const wasActive = CP.active;
     CP.active = false; CP.step = 'idle'; CP.busy = false; CP.canMove = false; CP.boarding = null; CP.hatchOpen = {}; CP.objective = null; CP.camFocus = null;
-    CP.zoomMul = 1; CP.zoomTarget = 1; CP.tapFn = null;
+    CP.zoomMul = 1; CP.zoomTarget = 1; CP.tapFn = null; CP.night = false; CP.battle = false; CP.reveal = false; CP.unboard = null; CP.crewGoTank = false; CP.win = false;
     hideAllCpUi();
     if (CP.resetMove) CP.resetMove();
     if (!wasActive && silent) return;
