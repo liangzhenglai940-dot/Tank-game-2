@@ -1,10 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-<head>    <meta property="og:title" content="裝甲終焉" />
-<meta property="og:description" content="扎扎師開發的遊戲" />
-<meta property="og:image" content="https://liangzhenglai940-dot.github.io/Tank-game-2/IMG_4833.jpeg" />
-<meta name="twitter:card" content="summary_large_image" />
-<link rel="apple-touch-icon" href="IMG_4833.jpeg
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>裝甲終焉</title>
@@ -6233,6 +6229,15 @@ function updateAiTank(e, targetList, bulletList) {
                 else if (dist > 250 && !heavyThreat) { moveAngle = aim; targetSpeed = e.maxSpeed * 0.86; state = 'skirmish'; }
                 else { moveAngle = aim + Math.PI / 2; targetSpeed = e.maxSpeed * 0.62; state = 'flank'; }
             }
+        }else if(e.cpTactic){
+            // 戰役版四號：保持射擊距離、橫向遊走、各自佔不同方位；不貼臉、不聚堆，殘血會拉開距離
+            if(e.strafeDir===undefined)e.strafeDir=Math.random()<.5?1:-1;
+            if(Math.random()<.006)e.strafeDir*=-1;
+            const want=e.sight*(.74+(e.cpSlot||0)*.07), flank=((e.cpSlot||0)-1)*.55;
+            if(hpRatio<.35&&dist<e.sight*.95){ moveAngle=aim; targetSpeed=-e.maxReverseSpeed*.9; state='kite-retreat'; }
+            else if(dist<want-90){ moveAngle=aim; targetSpeed=-e.maxReverseSpeed*.85; state='kite-back'; }
+            else if(dist>want+70){ moveAngle=aim+flank; targetSpeed=e.maxSpeed*.66; state='flank-advance'; }
+            else{ moveAngle=aim+e.strafeDir*1.05; targetSpeed=e.maxSpeed*.42; state='strafe'; }
         }else if(e.type==='T3485' || e.type==='Panzer4'){
             const buddy=ownTeam.filter(fr=>fr!==e&&fr.hp>0&&!fr.isInfantry)
                 .sort((a,b)=>Math.hypot(a.x-bestTarget.x,a.y-bestTarget.y)-Math.hypot(b.x-bestTarget.x,b.y-bestTarget.y))[0];
@@ -12989,7 +12994,7 @@ function mkTankObj(k, x, y, isAlly, ang) {
     const t = TANK_TEMPLATES[k];
     return { type: k, isInfantry: false, x, y, bodyAngle: ang, turretAngle: ang, speed: 0, maxSpeed: t.maxSpeed, maxReverseSpeed: t.maxReverseSpeed, size: t.size, bodyTurnSpeed: t.bodyTurnSpeed, turretTurnSpeed: t.turretTurnSpeed,
         shotCooldown: t.shotCooldown, lastShotTime: 0, hp: t.hp, maxHp: t.hp, frontArmor: t.frontArmor, sideArmor: t.sideArmor, damage: t.damage, pen: t.pen, sight: t.sight,
-        aiBehaviorTimer: 0, aiState: 'wander', wanderAngle: Math.random() * 6.283, wanderTimer: 0, idleTimer: 0, currentTarget: null, targetLockTimer: 0, lastDamageTime: 0, coverX: null, coverY: null, coverTimer: 0, isAlly, cpNearest: !isAlly };
+        aiBehaviorTimer: 0, aiState: 'wander', wanderAngle: Math.random() * 6.283, wanderTimer: 0, idleTimer: 0, currentTarget: null, targetLockTimer: 0, lastDamageTime: 0, coverX: null, coverY: null, coverTimer: 0, isAlly, cpNearest: !isAlly, cpTactic: !isAlly && k === 'Panzer4' };
 }
 function mkT34(x, y, order) { return Object.assign(mkTankObj('T3485', x, y, true, -Math.PI / 2), { cpScripted: true, go: false, idx: 0, parked: false, order }); }
 
@@ -13134,7 +13139,7 @@ function startBoard2() {
 
 function startAmbush() {
     CP.busy = true; CP.canMove = false; lockControls(); CP.crewGoTank = false;
-    ENEMY_SP.forEach(p => { const e = mkTankObj('Panzer4', p.x, p.y, false, Math.atan2(ARR.y - p.y, ARR.x - p.x)); e.cpHold = true; e.cpAdvance = true; enemies.push(e); });
+    ENEMY_SP.forEach((p, i) => { const e = mkTankObj('Panzer4', p.x, p.y, false, Math.atan2(ARR.y - p.y, ARR.x - p.x)); e.cpSlot = i; e.cpHold = true; e.cpAdvance = true; enemies.push(e); });
     CP.enemiesSpawned = true; rumble();
     // 鏡頭離開坦克，慢慢移到敵人身上
     spectatorCamera.x = tank.x; spectatorCamera.y = tank.y; spectatorCamera.zoom = currentCameraScale; isSpectatorMode = true; syncSettingsBtn();
@@ -13156,7 +13161,7 @@ function startBattle() {
 function spawnBattleUnits() {
     allies = []; enemies = [];
     CP.t34 = [mkT34(T34_FIN[0].x, T34_FIN[0].y, 0), mkT34(T34_FIN[1].x, T34_FIN[1].y, 1)]; CP.t34.forEach((t, i) => { t.cpScripted = false; t.cpEscort = true; t.bodyAngle = t.turretAngle = -2.2; t.parked = true; allies.push(t); });
-    ENEMY_SP.forEach(p => { const x = ARR.x + (p.x - ARR.x) * 0.55, y = ARR.y + (p.y - ARR.y) * 0.55, e = mkTankObj('Panzer4', x, y, false, Math.atan2(ARR.y - y, ARR.x - x)); e.cpAdvance = true; enemies.push(e); });
+    ENEMY_SP.forEach((p, i) => { const x = ARR.x + (p.x - ARR.x) * 0.55, y = ARR.y + (p.y - ARR.y) * 0.55, e = mkTankObj('Panzer4', x, y, false, Math.atan2(ARR.y - y, ARR.x - x)); e.cpAdvance = true; e.cpSlot = i; enemies.push(e); });
 }
 function retryBattle() {
     clearTimers(); $('cpDefeat').style.display = 'none'; defeatMenuContainer.style.display = 'none'; try { document.getElementById('respawnPanel').style.display = 'none'; } catch (e) {}
